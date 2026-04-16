@@ -3,6 +3,8 @@ __pycache__/
 .env
 *.log
 data/download/*.csv
+!data/download/xauusd-m15-bid-2015-01-01-2026-04-10.csv
+!data/download/xauusd-h1-bid-2015-01-01-2026-04-10.csv
 results/
 .idea/
 .vscode/
