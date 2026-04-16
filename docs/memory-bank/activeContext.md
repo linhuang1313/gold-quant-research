@@ -5,6 +5,14 @@
 
 ---
 
+## 仓库拆分 (2026-04-16 完成)
+
+- **实盘系统**: `gold-quant-trading` — gold_runner, trader, mt4_bridge, strategies, sentiment, 报告系统
+- **研究系统**: `gold-quant-research` — backtest engine, experiments, deploy scripts, legacy, results
+- 两仓库完全独立，修改研究代码不影响实盘运行
+- 研究仓库使用 `research_config.py` (替代 config.py) 和 `indicators.py` (替代 strategies/signals.py)
+- 注意: `linhuang1313/gold-quant-research` GitHub 仓库需要用 linhuang1313 账号手动创建后再推送
+
 ## 当前实盘状态 (2026-04-15)
 
 ### 舆情系统 v5 升级 (2026-04-15)
