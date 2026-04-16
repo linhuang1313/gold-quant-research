@@ -117,15 +117,15 @@
 
 | 策略 | 状态 | 观察重点 |
 |---|---|---|
-| P4_atr_regime | 运行中 | 不同波动率环境下胜率差异 |
-| P5_volume_breakout | 运行中 | volume_ratio IC≈0，预测力存疑 |
-| ~~P6_dxy_filtered~~ | **已停用 (2026-04-14)** | 5笔WR=20% PnL=-$8.70，替换为P10 |
-| P7_mega_trail | 运行中 | T0.5/D0.15 实盘 trailing 触发频率 |
-| P8_mega_h20 | 运行中 | 短持仓(5h)是否减少SL损失 |
-| P9_eurusd_keltner | 运行中 | EUR/USD KC mult=2.0 实盘验证 |
-| **P10_l6_ultratight** | **新增 (2026-04-14)** | L6 UltraTight2 trailing 实盘验证, low(0.30/0.06) normal(0.20/0.04) high(0.08/0.01), SL=3.5x, MaxPos=1, MaxHold=5 |
-| **P12_pinbar_keltner** | **新增 (2026-04-15)** | Keltner突破 + Pinbar形态确认，仅在突破方向有Pinbar时入场 |
-| **P13_pinbar_sr** | **新增 (2026-04-15)** | Pinbar + 支撑阻力位独立策略，在S/R zone出现Pinbar时入场 |
+| 波动分档 | 运行中 | 不同波动率环境下胜率差异 |
+| ~~量能突破~~ | 运行中 | volume_ratio IC≈0，预测力存疑 |
+| ~~美元过滤~~ | **已停用 (2026-04-14)** | 5笔WR=20% PnL=-$8.70，替换为极紧追踪 |
+| 宽幅追踪 | 运行中 | T0.5/D0.15 实盘 trailing 触发频率 |
+| 宽幅快出 | 运行中 | 短持仓(5h)是否减少SL损失 |
+| 欧美突破 | 运行中 | EUR/USD KC mult=2.0 实盘验证 |
+| **极紧追踪** | **新增 (2026-04-14)** | L6 UltraTight2 trailing 实盘验证, low(0.30/0.06) normal(0.20/0.04) high(0.08/0.01), SL=3.5x, MaxPos=1, MaxHold=5 |
+| **针形突破** | **新增 (2026-04-15)** | Keltner突破 + Pinbar形态确认，仅在突破方向有Pinbar时入场 |
+| **针形关口** | **新增 (2026-04-15)** | Pinbar + 支撑阻力位独立策略，在S/R zone出现Pinbar时入场 |
 
 ## 数据更新 (2026-04-10)
 
