@@ -10,6 +10,7 @@
   - 迁移: 104 实验脚本, 119 部署脚本, 28 legacy 脚本, 8 轮结果, 11 CSV 数据文件
   - 实盘仓库 `.gitignore` 新增排除: `round*_results/`, `marathon_results/`, `output/`, `research/`, `backtest/`
   - GitHub: `linhuang1212-coder/gold-quant-research` 已推送, `linhuang1313/gold-quant-research` 需手动创建
+- **研究仓库 Bugfix**: `research_config.py` 补充缺失 `LOT_SIZE=0.03`, 28个legacy脚本+2个factor脚本添加 `sys.path`, `backtest_filter_grid.py` 修复缩进错误
 - **Round 13 "Alpha 淬炼" 设计完成**:
   - 7 Phase, ~18 实验, 预计 20 小时
   - 回测引擎新增 7 个参数: `kc_ema_override`, `kc_mult_override`, `dual_kc_mode`, `kc_ma_type`, `gsr_filter_enabled`, `gsr_series`, `purge_embargo_bars`

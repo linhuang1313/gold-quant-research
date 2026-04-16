@@ -12,6 +12,8 @@
 - 两仓库完全独立，修改研究代码不影响实盘运行
 - 研究仓库使用 `research_config.py` (替代 config.py) 和 `indicators.py` (替代 strategies/signals.py)
 - 注意: `linhuang1313/gold-quant-research` GitHub 仓库需要用 linhuang1313 账号手动创建后再推送
+- Bugfix (2026-04-16): `research_config.py` 补充 `LOT_SIZE=0.03`, 28个legacy脚本+2个factor脚本添加 `sys.path`
+- 研究仓库独立窗口操作: `c:\Users\hlin2\gold-quant-research`，实盘窗口: `c:\Users\hlin2\gold-quant-trading`
 
 ## 当前实盘状态 (2026-04-15)
 
@@ -186,7 +188,7 @@
   - R6-B1 Part A 完成: L6 每年都优于 L5.1, 12年 delta 全正, 总计 +$5,648
   - R6-B2~B6 重新运行中 (~40%)
 - **Round 7** — Server A R7-5/R7-6 运行中 (17进程), Server B R7-4+ 运行中 (10进程)
-  - 脚本: `scripts/experiments/run_round7.py`
+  - 脚本: `gold-quant-research/experiments/run_round7.py`（已迁移到研究仓库）
 
 ### R7 已确认核心结论 (2026-04-13)
 
@@ -253,8 +255,8 @@
 
 - **新增引擎参数**: `kc_ema_override`, `kc_mult_override`, `dual_kc_mode/fast/slow`, `kc_ma_type`, `gsr_filter_enabled/series`, `purge_embargo_bars`
 - **新增指标**: `_hma()` (Hull MA), `_kama()` (Kaufman Adaptive MA), `add_dual_kc()` (双KC通道)
-- **脚本**: `scripts/experiments/run_round13.py`, `scripts/deploy_r13.py`, `scripts/check_r13.py`
-- **状态**: 已编写完成, 待部署
+- **脚本**: `gold-quant-research/experiments/run_round13.py`, `gold-quant-research/deploy/deploy_r13.py`
+- **状态**: 已编写完成, 待部署（在研究仓库中操作）
 
 ## 待办事项
 
