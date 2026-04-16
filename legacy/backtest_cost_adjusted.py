@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import os, sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from indicators import prepare_indicators
 
 from backtest import DataBundle, run_variant

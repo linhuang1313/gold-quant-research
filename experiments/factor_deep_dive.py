@@ -11,7 +11,11 @@
     python factor_deep_dive.py <csv_path>
 """
 import argparse
+import os
+import sys
 from typing import Optional
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 import numpy as np
 import pandas as pd

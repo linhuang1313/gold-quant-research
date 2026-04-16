@@ -21,6 +21,7 @@ from backtest.runner import (
     C12_KWARGS, load_m15, load_h1_aligned, add_atr_percentile, H1_CSV_PATH,
 )
 from backtest.engine import BacktestEngine
+import os, sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from indicators import prepare_indicators
 
 SPREAD = 0.50

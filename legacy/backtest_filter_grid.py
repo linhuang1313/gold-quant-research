@@ -13,11 +13,14 @@ Total: ~500 runs, ~4 hours @ 8 workers.
 
 Usage: python backtest_filter_grid.py [--workers N]
 """
+import os
 import sys
 import csv
 import json
 import time
 import itertools
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import multiprocessing as mp
 from collections import defaultdict
 from datetime import datetime

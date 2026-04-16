@@ -15,8 +15,11 @@
     python factor_scanner.py <csv_path> [--horizons 1 4 8] [--wf-splits 5]
 """
 import argparse
+import os
 import sys
 from typing import Dict, List, Optional, Tuple
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 import numpy as np
 import pandas as pd

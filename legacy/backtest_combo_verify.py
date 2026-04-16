@@ -29,6 +29,7 @@ from backtest.runner import (
     load_h1_aligned,
     H1_CSV_PATH,
 )
+import os, sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from indicators import prepare_indicators, get_orb_strategy
 import indicators as signals_mod
 
