@@ -1,0 +1,243 @@
+{
+  "timestamp": "2026-04-20 14:36:27.053464",
+  "data_range": "2015-01-01 00:00:00+00:00 -> 2026-04-17 23:00:00+00:00",
+  "total_bars": 99000,
+  "results": [
+    {
+      "n": 11038,
+      "sharpe": 2.17,
+      "total_pnl": 16177.19,
+      "max_dd": 896.04,
+      "dd_pct": 44.8,
+      "win_rate": 76.4,
+      "avg_pnl": 1.47,
+      "label": "KC Gold-params(ADX18,SL4.5,TP8)"
+    },
+    {
+      "n": 7996,
+      "sharpe": 2.16,
+      "total_pnl": 13325.36,
+      "max_dd": 456.89,
+      "dd_pct": 22.8,
+      "win_rate": 76.1,
+      "avg_pnl": 1.67,
+      "label": "KC mult=2.0(ADX18)"
+    },
+    {
+      "n": 7948,
+      "sharpe": 2.17,
+      "total_pnl": 13294.59,
+      "max_dd": 461.33,
+      "dd_pct": 23.1,
+      "win_rate": 76.2,
+      "avg_pnl": 1.67,
+      "label": "KC mult=2.0(ADX20)"
+    },
+    {
+      "n": 7673,
+      "sharpe": 2.11,
+      "total_pnl": 12583.36,
+      "max_dd": 528.73,
+      "dd_pct": 26.4,
+      "win_rate": 76.2,
+      "avg_pnl": 1.64,
+      "label": "KC mult=2.0(ADX25)"
+    },
+    {
+      "n": 7879,
+      "sharpe": 2.05,
+      "total_pnl": 10838.43,
+      "max_dd": 455.16,
+      "dd_pct": 22.8,
+      "win_rate": 77.2,
+      "avg_pnl": 1.38,
+      "label": "KC mult=2.0 SL6 TP10"
+    },
+    {
+      "n": 7996,
+      "sharpe": 2.16,
+      "total_pnl": 13325.36,
+      "max_dd": 456.89,
+      "dd_pct": 22.8,
+      "win_rate": 76.1,
+      "avg_pnl": 1.67,
+      "label": "KC mult=2.0 Trail(0.6/0.15)"
+    },
+    {
+      "n": 7614,
+      "sharpe": 1.78,
+      "total_pnl": 10951.86,
+      "max_dd": 496.69,
+      "dd_pct": 24.8,
+      "win_rate": 74.1,
+      "avg_pnl": 1.44,
+      "label": "KC mult=2.0 No-regime"
+    },
+    {
+      "n": 7706,
+      "sharpe": 2.34,
+      "total_pnl": 14545.07,
+      "max_dd": 400.0,
+      "dd_pct": 20.0,
+      "win_rate": 78.9,
+      "avg_pnl": 1.89,
+      "label": "KC mult=2.0 MaxHold=20"
+    },
+    {
+      "n": 8008,
+      "sharpe": 3.91,
+      "total_pnl": 25234.2,
+      "max_dd": 302.26,
+      "dd_pct": 15.1,
+      "win_rate": 76.4,
+      "avg_pnl": 3.15,
+      "label": "KC mult=2.0 No-spread"
+    },
+    {
+      "n": 7996,
+      "sharpe": 2.04,
+      "total_pnl": 8570.62,
+      "max_dd": 365.85,
+      "dd_pct": 18.3,
+      "win_rate": 76.1,
+      "avg_pnl": 1.07,
+      "label": "KC mult=2.0 risk$30"
+    }
+  ],
+  "kfold_gold": [
+    {
+      "n": 1930,
+      "sharpe": 2.72,
+      "total_pnl": 4135.19,
+      "max_dd": 397.05,
+      "dd_pct": 19.9,
+      "win_rate": 75.5,
+      "avg_pnl": 2.14,
+      "label": "KF-Gold_Fold1(2015-2016)",
+      "fold": "Fold1(2015-2016)"
+    },
+    {
+      "n": 2022,
+      "sharpe": 2.83,
+      "total_pnl": 3636.89,
+      "max_dd": 264.79,
+      "dd_pct": 13.2,
+      "win_rate": 78.4,
+      "avg_pnl": 1.8,
+      "label": "KF-Gold_Fold2(2017-2018)",
+      "fold": "Fold2(2017-2018)"
+    },
+    {
+      "n": 1985,
+      "sharpe": 2.97,
+      "total_pnl": 3460.5,
+      "max_dd": 258.9,
+      "dd_pct": 12.9,
+      "win_rate": 77.5,
+      "avg_pnl": 1.74,
+      "label": "KF-Gold_Fold3(2019-2020)",
+      "fold": "Fold3(2019-2020)"
+    },
+    {
+      "n": 1869,
+      "sharpe": 1.25,
+      "total_pnl": 1623.04,
+      "max_dd": 433.06,
+      "dd_pct": 21.7,
+      "win_rate": 75.2,
+      "avg_pnl": 0.87,
+      "label": "KF-Gold_Fold4(2021-2022)",
+      "fold": "Fold4(2021-2022)"
+    },
+    {
+      "n": 1922,
+      "sharpe": 0.9,
+      "total_pnl": 1091.23,
+      "max_dd": 896.04,
+      "dd_pct": 44.8,
+      "win_rate": 75.0,
+      "avg_pnl": 0.57,
+      "label": "KF-Gold_Fold5(2023-2024)",
+      "fold": "Fold5(2023-2024)"
+    },
+    {
+      "n": 1227,
+      "sharpe": 2.18,
+      "total_pnl": 1904.75,
+      "max_dd": 286.64,
+      "dd_pct": 14.3,
+      "win_rate": 76.3,
+      "avg_pnl": 1.55,
+      "label": "KF-Gold_Fold6(2025-2026)",
+      "fold": "Fold6(2025-2026)"
+    }
+  ],
+  "kfold_wide": [
+    {
+      "n": 1370,
+      "sharpe": 2.36,
+      "total_pnl": 3016.95,
+      "max_dd": 331.06,
+      "dd_pct": 16.6,
+      "win_rate": 74.9,
+      "avg_pnl": 2.2,
+      "label": "KF-Wide_Fold1(2015-2016)",
+      "fold": "Fold1(2015-2016)"
+    },
+    {
+      "n": 1468,
+      "sharpe": 2.58,
+      "total_pnl": 2762.15,
+      "max_dd": 207.78,
+      "dd_pct": 10.4,
+      "win_rate": 78.7,
+      "avg_pnl": 1.88,
+      "label": "KF-Wide_Fold2(2017-2018)",
+      "fold": "Fold2(2017-2018)"
+    },
+    {
+      "n": 1393,
+      "sharpe": 2.38,
+      "total_pnl": 2269.06,
+      "max_dd": 314.85,
+      "dd_pct": 15.7,
+      "win_rate": 76.2,
+      "avg_pnl": 1.63,
+      "label": "KF-Wide_Fold3(2019-2020)",
+      "fold": "Fold3(2019-2020)"
+    },
+    {
+      "n": 1378,
+      "sharpe": 1.35,
+      "total_pnl": 1454.93,
+      "max_dd": 349.19,
+      "dd_pct": 17.5,
+      "win_rate": 74.9,
+      "avg_pnl": 1.06,
+      "label": "KF-Wide_Fold4(2021-2022)",
+      "fold": "Fold4(2021-2022)"
+    },
+    {
+      "n": 1415,
+      "sharpe": 1.5,
+      "total_pnl": 1490.94,
+      "max_dd": 456.89,
+      "dd_pct": 22.8,
+      "win_rate": 75.1,
+      "avg_pnl": 1.05,
+      "label": "KF-Wide_Fold5(2023-2024)",
+      "fold": "Fold5(2023-2024)"
+    },
+    {
+      "n": 905,
+      "sharpe": 2.76,
+      "total_pnl": 1957.32,
+      "max_dd": 192.46,
+      "dd_pct": 9.6,
+      "win_rate": 76.6,
+      "avg_pnl": 2.16,
+      "label": "KF-Wide_Fold6(2025-2026)",
+      "fold": "Fold6(2025-2026)"
+    }
+  ]
+}

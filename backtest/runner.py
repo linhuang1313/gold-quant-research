@@ -436,6 +436,18 @@ def run_variant(data: DataBundle, label: str, *, verbose: bool = True, **engine_
     stats['profit_dd_exit_count'] = getattr(engine, 'profit_dd_exit_count', 0)
     stats['adaptive_hold_triggered'] = getattr(engine, 'adaptive_hold_triggered', 0)
     stats['session_entry_counts'] = getattr(engine, 'session_entry_counts', {})
+    # R16 counters
+    stats['timeout_profit_lock'] = getattr(engine, 'timeout_profit_lock_count', 0)
+    stats['timeout_adverse_exit'] = getattr(engine, 'timeout_adverse_exit_count', 0)
+    stats['timeout_momentum_exit'] = getattr(engine, 'timeout_momentum_exit_count', 0)
+    stats['timeout_dynamic_extend'] = getattr(engine, 'timeout_dynamic_extend_count', 0)
+    stats['timeout_dynamic_cut'] = getattr(engine, 'timeout_dynamic_cut_count', 0)
+    # R17 counters
+    stats['dd_pause_count'] = getattr(engine, 'dd_pause_count', 0)
+    stats['dd_reduce_count'] = getattr(engine, 'dd_reduce_count', 0)
+    stats['equity_filter_skip'] = getattr(engine, 'equity_filter_skip_count', 0)
+    stats['final_capital'] = getattr(engine, '_current_capital', 0)
+    stats['equity_peak'] = getattr(engine, '_equity_peak', 0)
     stats['elapsed_s'] = round(elapsed, 1)
     stats['_trades'] = trades
     stats['_equity_curve'] = engine.equity_curve

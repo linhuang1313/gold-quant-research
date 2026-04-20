@@ -1,58 +1,33 @@
-#!/usr/bin/env python3
-"""Read R7 results + R6B results from both servers."""
+"""Read key result files from both servers."""
 import paramiko, sys, io
-
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-SERVERS = {
-    "A": {"host": "connect.westb.seetacloud.com", "port": 42894, "user": "root", "password": "r1zlTZQUb+E4"},
-    "B": {"host": "connect.westb.seetacloud.com", "port": 25821, "user": "root", "password": "r1zlTZQUb+E4"},
-}
-
-def run_cmd(client, cmd, timeout=60):
-    _, stdout, _ = client.exec_command(cmd, timeout=timeout)
+def run(c, cmd):
+    _, stdout, _ = c.exec_command(cmd, timeout=30)
     return stdout.read().decode('utf-8', errors='replace').strip()
 
-for name, info in SERVERS.items():
-    print(f"\n{'='*70}")
-    print(f"Server {name} (:{info['port']})")
-    print('='*70)
-    
-    c = paramiko.SSHClient()
-    c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    c.connect(info["host"], port=info["port"], username=info["user"], password=info["password"], timeout=30)
-    
-    # R7 master log
-    print("\n--- R7 Master Log ---")
-    print(run_cmd(c, "cat /root/gold-quant-trading/round7_results/00_master_log.txt 2>/dev/null || echo 'N/A'"))
-    
-    # R7 result files
-    for f in ["r7_1_baseline.txt", "r7_2_entry_gap.txt", "r7_3_l6_on_l51.txt", "r7_4_monte_carlo.txt", "r7_5_tp_interact.txt", "r7_6_recent_zoom.txt"]:
-        content = run_cmd(c, f"cat /root/gold-quant-trading/round7_results/{f} 2>/dev/null")
-        if content:
-            print(f"\n--- {f} ---")
-            print(content)
-    
-    # R6B results (Server B only)
-    if name == "B":
-        print("\n--- R6B Master Log ---")
-        print(run_cmd(c, "cat /root/gold-quant-trading/round6_results/00_master_log.txt 2>/dev/null || echo 'N/A'"))
-        
-        for f in ["r6_b1_l6.txt", "r6_b2_exit.txt", "r6_b3_combo.txt", "r6_b4_interact.txt", "r6_b5_recent.txt", "r6_b6_heatmap.txt"]:
-            content = run_cmd(c, f"cat /root/gold-quant-trading/round6_results/{f} 2>/dev/null")
-            if content:
-                print(f"\n--- {f} ---")
-                print(content)
-        
-        # R6B stdout tail
-        print("\n--- R6B stdout (last 30 lines) ---")
-        print(run_cmd(c, "tail -30 /root/gold-quant-trading/round6_results/round6b_stdout.txt 2>/dev/null || echo 'N/A'"))
-    
-    # Process count
-    r7_cnt = run_cmd(c, "ps aux | grep 'round7' | grep -v grep | wc -l")
-    r6b_cnt = run_cmd(c, "ps aux | grep 'round6b' | grep -v grep | wc -l")
-    print(f"\n--- Active: R7={r7_cnt} processes, R6B={r6b_cnt} processes ---")
-    
-    c.close()
+# Server D - R13 results
+print("=" * 80)
+print("SERVER D: R13 Alpha Refinement - Key Results")
+print("=" * 80)
 
-print("\nDone!")
+c = paramiko.SSHClient()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+c.connect("connect.westd.seetacloud.com", port=35258, username="root",
+          password="r1zlTZQUb+E4", timeout=30, banner_timeout=60, auth_timeout=60)
+
+for fname in ["R13-A1_ema_scan.txt", "R13-A2_mult_scan.txt", "R13-A3_heatmap.txt",
+              "R13-A4_kfold.txt", "R13-B1_breakeven.txt", "R13-B2_be_kfold.txt",
+              "R13-C1_dual_kc.txt", "R13-C2_dual_params.txt", "R13-C3_dual_kfold.txt",
+              "R13-D1_hma.txt", "R13-D2_kama.txt", "R13-D3_ma_kfold.txt"]:
+    content = run(c, f"cat /root/gold-quant-trading/round13_results/{fname} 2>/dev/null")
+    if content:
+        print(f"\n--- {fname} ---")
+        print(content)
+
+# current phase
+print("\n--- Current running phase ---")
+phase_markers = run(c, r"grep -n 'R13-\|Phase\|=====\|Experiment' /root/gold-quant-trading/logs/round13.log 2>/dev/null | tail -10")
+print(phase_markers if phase_markers else "No phase markers")
+
+c.close()

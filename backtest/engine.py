@@ -243,6 +243,31 @@ class BacktestEngine:
         progressive_sl_start_bar: int = 0,
         progressive_sl_target_mult: float = 0.0,
         progressive_sl_steps: int = 0,
+        # R16: Timeout Sniper — dynamic timeout exit strategies
+        timeout_profit_lock_atr: float = 0.0,  # lock profit at N*ATR before timeout (0=disabled)
+        timeout_profit_lock_bar: int = 0,       # activate profit lock after N bars (0=use max_hold-2)
+        timeout_adverse_exit: bool = False,      # exit early if adverse signal detected near timeout
+        timeout_adverse_bar: int = 0,            # start checking adverse signals after N bars (0=max_hold//2)
+        timeout_momentum_exit: bool = False,     # exit if momentum decays (close crosses EMA mid)
+        timeout_momentum_bar: int = 0,           # start checking momentum after N bars (0=max_hold//2)
+        timeout_dynamic: bool = False,           # dynamic max hold based on profit trajectory
+        timeout_extend_bars: int = 4,            # extend max hold by N bars if profitable
+        timeout_cut_bars: int = 4,               # cut max hold by N bars if adverse
+        timeout_cut_threshold_atr: float = -0.5, # adverse threshold to cut hold (ATR mult, negative)
+        timeout_extend_threshold_atr: float = 0.3,  # profit threshold to extend hold (ATR mult)
+        # R17: Capital Curve Engineering — money management
+        kelly_fraction: float = 0.0,       # Kelly sizing fraction (0=disabled; 0.25=quarter Kelly)
+        drawdown_protection: bool = False,  # enable equity drawdown protection
+        drawdown_max_pct: float = 0.10,    # pause trading if drawdown from peak > X%
+        drawdown_reduce_pct: float = 0.05, # reduce lot size when drawdown > X%
+        drawdown_reduce_factor: float = 0.5,  # multiply lots by this factor during drawdown
+        anti_martingale: bool = False,       # increase size after wins, decrease after losses
+        anti_martingale_win_mult: float = 1.2,  # lot multiplier after consecutive wins
+        anti_martingale_loss_mult: float = 0.8, # lot multiplier after consecutive losses
+        anti_martingale_max_streak: int = 3,    # cap streak effect at N consecutive
+        profit_reinvest_pct: float = 0.0,  # fraction of profits to reinvest into capital (0-1)
+        equity_curve_filter: bool = False,  # only trade when equity > its own MA
+        equity_ma_period: int = 50,         # MA period for equity curve filter (in trades)
         # Label
         label: str = "",
     ):
@@ -432,6 +457,46 @@ class BacktestEngine:
         self._prog_sl_start = progressive_sl_start_bar
         self._prog_sl_target = progressive_sl_target_mult
         self._prog_sl_steps = progressive_sl_steps
+
+        # R16: Timeout Sniper
+        self._timeout_profit_lock_atr = timeout_profit_lock_atr
+        self._timeout_profit_lock_bar = timeout_profit_lock_bar
+        self._timeout_adverse_exit = timeout_adverse_exit
+        self._timeout_adverse_bar = timeout_adverse_bar
+        self._timeout_momentum_exit = timeout_momentum_exit
+        self._timeout_momentum_bar = timeout_momentum_bar
+        self._timeout_dynamic = timeout_dynamic
+        self._timeout_extend_bars = timeout_extend_bars
+        self._timeout_cut_bars = timeout_cut_bars
+        self._timeout_cut_threshold_atr = timeout_cut_threshold_atr
+        self._timeout_extend_threshold_atr = timeout_extend_threshold_atr
+        self.timeout_profit_lock_count = 0
+        self.timeout_adverse_exit_count = 0
+        self.timeout_momentum_exit_count = 0
+        self.timeout_dynamic_extend_count = 0
+        self.timeout_dynamic_cut_count = 0
+
+        # R17: Capital Curve Engineering
+        self._kelly_fraction = kelly_fraction
+        self._drawdown_protection = drawdown_protection
+        self._drawdown_max_pct = drawdown_max_pct
+        self._drawdown_reduce_pct = drawdown_reduce_pct
+        self._drawdown_reduce_factor = drawdown_reduce_factor
+        self._anti_martingale = anti_martingale
+        self._anti_martingale_win_mult = anti_martingale_win_mult
+        self._anti_martingale_loss_mult = anti_martingale_loss_mult
+        self._anti_martingale_max_streak = anti_martingale_max_streak
+        self._profit_reinvest_pct = profit_reinvest_pct
+        self._equity_curve_filter = equity_curve_filter
+        self._equity_ma_period = equity_ma_period
+        self._consecutive_wins = 0
+        self._consecutive_losses = 0
+        self._equity_peak = self._initial_capital
+        self._trade_equity_history: List[float] = []
+        self._trading_paused_dd = False
+        self.dd_pause_count = 0
+        self.dd_reduce_count = 0
+        self.equity_filter_skip_count = 0
 
         # State
         self.positions: List[Position] = []
@@ -728,6 +793,71 @@ class BacktestEngine:
                             remaining = max_hold - check_bar
                             max_hold = check_bar + remaining // 2
                             self.adaptive_hold_triggered += 1
+
+                # R16: Dynamic timeout — extend if profitable, cut if adverse
+                if self._timeout_dynamic and pos.strategy == 'keltner':
+                    atr_dyn = self._get_h1_atr(h1_window) if h1_window is not None else 0
+                    if atr_dyn > 0:
+                        if pos.direction == 'BUY':
+                            pnl_atr = (close - pos.entry_price) / atr_dyn
+                        else:
+                            pnl_atr = (pos.entry_price - close) / atr_dyn
+                        if pnl_atr >= self._timeout_extend_threshold_atr:
+                            max_hold += self._timeout_extend_bars
+                            self.timeout_dynamic_extend_count += 1
+                        elif pnl_atr <= self._timeout_cut_threshold_atr:
+                            max_hold = max(pos.bars_held + 1, max_hold - self._timeout_cut_bars)
+                            self.timeout_dynamic_cut_count += 1
+
+                # R16: Pre-timeout profit lock
+                if (not reason and self._timeout_profit_lock_atr > 0
+                        and pos.strategy == 'keltner'):
+                    lock_bar = self._timeout_profit_lock_bar if self._timeout_profit_lock_bar > 0 else max(1, max_hold - 2)
+                    if pos.bars_held >= lock_bar:
+                        atr_lock = self._get_h1_atr(h1_window) if h1_window is not None else 0
+                        if atr_lock > 0:
+                            if pos.direction == 'BUY':
+                                float_pnl = close - pos.entry_price
+                            else:
+                                float_pnl = pos.entry_price - close
+                            if float_pnl >= atr_lock * self._timeout_profit_lock_atr:
+                                reason = "TimeoutProfitLock"
+                                exit_price = close
+                                self.timeout_profit_lock_count += 1
+
+                # R16: Adverse signal exit near timeout
+                if (not reason and self._timeout_adverse_exit
+                        and pos.strategy == 'keltner' and h1_window is not None and len(h1_window) >= 2):
+                    adv_bar = self._timeout_adverse_bar if self._timeout_adverse_bar > 0 else max(1, max_hold // 2)
+                    if pos.bars_held >= adv_bar:
+                        last_h1 = h1_window.iloc[-1]
+                        kc_mid = float(last_h1.get('KC_mid', 0))
+                        if kc_mid > 0:
+                            if pos.direction == 'BUY' and close < kc_mid:
+                                reason = "TimeoutAdverse"
+                                exit_price = close
+                                self.timeout_adverse_exit_count += 1
+                            elif pos.direction == 'SELL' and close > kc_mid:
+                                reason = "TimeoutAdverse"
+                                exit_price = close
+                                self.timeout_adverse_exit_count += 1
+
+                # R16: Momentum decay exit
+                if (not reason and self._timeout_momentum_exit
+                        and pos.strategy == 'keltner' and h1_window is not None and len(h1_window) >= 2):
+                    mom_bar = self._timeout_momentum_bar if self._timeout_momentum_bar > 0 else max(1, max_hold // 2)
+                    if pos.bars_held >= mom_bar:
+                        last_h1 = h1_window.iloc[-1]
+                        ema100 = float(last_h1.get('EMA100', 0))
+                        if ema100 > 0:
+                            if pos.direction == 'BUY' and close < ema100:
+                                reason = "MomentumDecay"
+                                exit_price = close
+                                self.timeout_momentum_exit_count += 1
+                            elif pos.direction == 'SELL' and close > ema100:
+                                reason = "MomentumDecay"
+                                exit_price = close
+                                self.timeout_momentum_exit_count += 1
 
                 if pos.bars_held >= max_hold:
                     reason = f"Timeout:{pos.bars_held}>={max_hold}"
@@ -1352,14 +1482,60 @@ class BacktestEngine:
             if current_dir and direction != current_dir:
                 continue
 
+            # R17: Equity drawdown protection — pause trading during deep drawdowns
+            if self._drawdown_protection and self._current_capital < self._equity_peak * (1 - self._drawdown_max_pct):
+                self._trading_paused_dd = True
+                self.dd_pause_count += 1
+                continue
+            self._trading_paused_dd = False
+
+            # R17: Equity curve filter — only trade when equity > its own MA
+            if self._equity_curve_filter and len(self._trade_equity_history) >= self._equity_ma_period:
+                eq_ma = sum(self._trade_equity_history[-self._equity_ma_period:]) / self._equity_ma_period
+                if self._current_capital < eq_ma:
+                    self.equity_filter_skip_count += 1
+                    continue
+
             rpt = self._risk_per_trade
             if self._compounding and self._current_capital > 0:
                 rpt = self._current_capital * (self._risk_per_trade / self._initial_capital)
+
+            # R17: Kelly fraction sizing
+            if self._kelly_fraction > 0 and len(self.trades) >= 20:
+                wins_k = [t.pnl for t in self.trades[-100:] if t.pnl > 0]
+                losses_k = [abs(t.pnl) for t in self.trades[-100:] if t.pnl <= 0]
+                if wins_k and losses_k:
+                    win_prob = len(wins_k) / (len(wins_k) + len(losses_k))
+                    avg_win_k = sum(wins_k) / len(wins_k)
+                    avg_loss_k = sum(losses_k) / len(losses_k)
+                    if avg_loss_k > 0:
+                        b = avg_win_k / avg_loss_k
+                        kelly = win_prob - (1 - win_prob) / b if b > 0 else 0
+                        kelly = max(0, kelly * self._kelly_fraction)
+                        rpt = self._current_capital * kelly
+
             if sl > 0:
                 lots = round(rpt / (sl * config.POINT_VALUE_PER_LOT), 2)
             else:
                 lots = self._min_lot
             lots = max(self._min_lot, min(self._max_lot, lots))
+
+            # R17: Drawdown reduction — reduce lots during moderate drawdowns
+            if (self._drawdown_protection
+                    and self._current_capital < self._equity_peak * (1 - self._drawdown_reduce_pct)):
+                lots = round(lots * self._drawdown_reduce_factor, 2)
+                lots = max(self._min_lot, lots)
+                self.dd_reduce_count += 1
+
+            # R17: Anti-martingale — adjust lots based on consecutive win/loss streaks
+            if self._anti_martingale:
+                streak = min(self._consecutive_wins, self._anti_martingale_max_streak)
+                if streak > 0:
+                    lots = round(lots * (self._anti_martingale_win_mult ** streak), 2)
+                streak_l = min(self._consecutive_losses, self._anti_martingale_max_streak)
+                if streak_l > 0:
+                    lots = round(lots * (self._anti_martingale_loss_mult ** streak_l), 2)
+                lots = max(self._min_lot, min(self._max_lot, lots))
 
             if self._atr_regime_lots:
                 h1_window = self._get_h1_window(bar_time)
@@ -1460,6 +1636,25 @@ class BacktestEngine:
         if self._compounding:
             self._realized_pnl += pnl
             self._current_capital = self._initial_capital + self._realized_pnl
+        elif self._profit_reinvest_pct > 0 and pnl > 0:
+            self._realized_pnl += pnl
+            reinvest = pnl * self._profit_reinvest_pct
+            self._current_capital = self._initial_capital + reinvest
+        else:
+            self._realized_pnl += pnl
+            self._current_capital = self._initial_capital + self._realized_pnl
+
+        # R17: Track equity peak and streak
+        if self._current_capital > self._equity_peak:
+            self._equity_peak = self._current_capital
+        self._trade_equity_history.append(self._current_capital)
+
+        if pnl > 0:
+            self._consecutive_wins += 1
+            self._consecutive_losses = 0
+        elif pnl < 0:
+            self._consecutive_losses += 1
+            self._consecutive_wins = 0
 
         if pnl < 0:
             self.daily_loss_count += 1
