@@ -5,6 +5,8 @@ __pycache__/
 data/download/*.csv
 !data/download/xauusd-m15-bid-2015-01-01-2026-04-10.csv
 !data/download/xauusd-h1-bid-2015-01-01-2026-04-10.csv
+data/m1_raw/
+data/tick/
 results/
 .idea/
 .vscode/

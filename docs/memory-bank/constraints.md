@@ -50,7 +50,40 @@
 
 ### 策略类
 - **Donchian Channel**: 全部负 Sharpe
-- **Keltner 均值回归 (H1)**: 15配置全负
+- **Keltner 均值回归 (H1)**: 15配置全负, 盈亏比不足(SL远大于到KC mid的TP空间)
+- **XAUUSD 均值回归全面否决**: H1 KC(15配), M1 MeanRevert/Bounce, RSI均值回归全负; 黄金趋势持续性太强
+- **RSI2 均值回归 (EUR/USD H1)**: 同样负 Sharpe, 与黄金结论一致
+- **R21 S4 极端反转**: 81组参数全负 Sharpe, "逆向做反转在黄金上不可行"
+- **R21 S2 NFP/FOMC Continuation**: 信号太弱, 不单独建模
+- **Stochastic Mean Reversion**: 标记观察, 未验证有效
+
+### ML / 高频 Scalper 类 (2026-04-20 全面否决)
+- **M1 EMA Scalper (Grid/HF)**: M15→M1 数据降级无效, 所有变体亏损
+- **M1 规则 Scalper (MeanRevert/Momentum/Bounce/Smart)**: 最佳 WR 66% 但 RR<1, 全亏
+- **M1 ML Scalper v2 (XGBoost)**: Sharpe -4.10, WR 54.5%, RR 0.70
+- **M1 ML Scalper v3 (XGB+LGB Ensemble + VolFilter + ATR自适应)**: 最佳 Sharpe -2.42
+- **M1 ML Scalper v4 (智能出场 Lock/QCut)**: 最佳 Sharpe -0.85 (TP$5/SL$3.5)
+- **M1 ML Scalper v5 (6m训练 + 精细网格搜索)**: 最佳 Sharpe -1.08, 2025+ AUC退化到0.5
+- **结论**: M1 bar 级别统计特征不足以产生 alpha; 截图策略依赖 tick/order flow 基础设施, 不可复制
+
+### Keltner 框架内微调 (2026-04-20 确认触顶, 2026-04-22 更新)
+- **L系列进化已触顶**: L3(4.07)→L5(5.43)→L5.1(6.17)→L6(7.18)→L7(7.46), 边际递减
+- **R13 EMA/Mult/MA 全扫描**: EMA25/Mult1.2 已近全局最优, 全部否决
+- **R24 L8 候选**: L8c_max_tight Sharpe 10.03 (K-Fold 6/6), 但仍为同框架微调
+- **不再投入时间做 Keltner 参数扫描/微调**, 除非有结构性新信息
+- **⚠️ 例外: MaxHold 优化有效** (R25/R27): MH 20→8 Sharpe +0.7~1.0, 这不是参数微调而是结构性改善 (减少 Timeout 最大亏损源)
+
+### R25-R27 已验证的正面结论 (2026-04-22)
+- **D1/H4 Keltner 是独立 alpha**: EMA20/M2.0/ADX18, K-Fold 6/6, 与 L7 相关性 0.17-0.22
+- **D1/H4 参数极其鲁棒**: R27 cliff test 125 组合, EMA15-25/Mult1.5-2.5/ADX15-25 全区域 Sharpe 3.7-6.6, 无悬崖
+- **EqCurve LB=30 是有效风控层**: R27 K-Fold 6/6 改善, 平均 +0.25 Sharpe, 非过拟合
+- **多策略独立运行无冲突**: R27 L7-H4 重叠时 88% 同方向, 不需要互斥逻辑
+
+### Dynamic Sizing 否决 (R25 Phase B, 2026-04-21)
+- **Streak-based sizing**: 连亏/连赢后调仓, 全部无改善 (连亏后下一笔期望仍为正)
+- **Regime-based sizing**: ATR regime 加权, 无改善
+- **Kelly Criterion sizing**: f=0.553, 但实际应用降低 Sharpe
+- **⚠️ 例外: EqCurve LB=30 有效** — 近30笔均值<0 时缩仓0.5x, K-Fold 6/6 验证
 
 ---
 

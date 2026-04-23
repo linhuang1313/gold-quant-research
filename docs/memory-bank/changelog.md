@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-04-22
+
+- **R28 L7(MH=8) 完整数据 K-Fold 验证**: 运行中
+  - 对比: L6 vs L7(MH=20) vs L7(MH=8) 全样本 + 6-Fold K-Fold (真实引擎)
+  - 脚本: `experiments/run_round28_l7mh8_kfold.py`
+
+## 2026-04-21
+
+- **R27 完整验证套件 (6项全部完成, 18.8分钟)**:
+  - P0-1 引擎平价检查: D1 spread=0.50 Sharpe 5.62, spread=1.00 Sharpe 5.03; H4 spread=0.50 Sharpe 4.16, spread=1.00 Sharpe 3.19 → 对执行成本高度鲁棒
+  - P0-2 持仓冲突: L7(20878 trades) vs D1(288) vs H4(1947); L7-H4 重叠 88% 同方向; 三策略应独立运行, 最大敞口 0.09 lot
+  - P1-3 EqCurve LB=30 K-Fold: **6/6 改善**, Fold1~6 delta +0.11~+0.33, mean +0.25 Sharpe → 非过拟合
+  - P1-4 参数 cliff test: D1 125 组合 (EMA15-25/Mult1.5-2.5/ADX15-25) Sharpe 3.9-6.6; H4 125 组合 Sharpe 3.7-5.1 → 无 cliff, 极其稳定
+  - P1-5 MaxHold sweep: D1 最优 MH=8 Sharpe 6.03 (K-Fold 6/6, mean=9.16); H4 最优 MH=20 Sharpe 4.64 (K-Fold 6/6, mean=6.27)
+  - P2-6 Lot 优化: L7(1.0x)+H4(0.5x) Sharpe 8.99, PnL $72,664, MaxDD $311; 纯 Sharpe 最优仍是 L7 alone (9.42)
+  - 脚本: `experiments/run_round27.py`, 结果: `results/round27_results/R27_output.txt`
+- **R25/R26 成果汇总** (此前完成, 此处补记):
+  - R25 Phase A: L7 MaxHold sweep → MH=8 Sharpe 10.14 (截断数据), K-Fold 5/5
+  - R25 Phase B: Dynamic Sizing → EqCurve LB=30 Sharpe +0.41; Kelly/Streak/Regime 均无改善
+  - R25 Phase C: D1/H4 Keltner 网格搜索 → 发现 D1(EMA20/M2.0/ADX18) 和 H4(EMA20/M2.0/ADX18)
+  - R26: D1/H4 K-Fold 验证 → 均 6/6 通过; 与 L7 相关性 0.17-0.22; 组合 L7+H4 PnL +40%
+  - 脚本: `experiments/run_round25.py`, `experiments/run_round26.py`
+- **服务器信息更新**: 新增 Server BJB1 `ssh -p 45411 root@connect.bjb1.seetacloud.com` (密码 `5zQ8khQzttDN`)
+
 ## 2026-04-20
 
 - **R22 EUR/USD 品种扩展**: 81 参数组合网格搜索 (KC 1.2/1.5/2.0 × ADX 18/22/25 × Trail × MH)
