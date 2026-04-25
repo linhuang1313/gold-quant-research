@@ -4,7 +4,9 @@ Backtest Runner — Data Loading & Experiment Execution
 Eliminates the ~20 copies of "load data → prepare indicators → reset state → run"
 scattered across experiment scripts.
 """
+import os
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -459,6 +461,49 @@ def run_variant(data: DataBundle, label: str, *, verbose: bool = True, **engine_
     return stats
 
 
+def _worker_run_variant(args):
+    """Subprocess worker: run a single variant in isolation."""
+    m15_df, h1_df, label, engine_kwargs = args
+    get_orb_strategy().reset_daily()
+    signals_mod._friday_close_price = None
+    signals_mod._gap_traded_today = False
+
+    t0 = time.time()
+    engine = BacktestEngine(m15_df, h1_df, label=label, **engine_kwargs)
+    trades = engine.run()
+    elapsed = time.time() - t0
+
+    stats = calc_stats(trades, engine.equity_curve)
+    stats['label'] = label
+    stats['elapsed_s'] = round(elapsed, 1)
+    stats['n_trades_raw'] = len(trades)
+    for attr in ['rsi_filtered_count', 'rsi_total_signals', 'h1_entry_count',
+                 'm15_entry_count', 'skipped_choppy', 'skipped_neutral_m15',
+                 'skipped_ema_slope', 'atr_spike_tighten_count', 'skipped_kc_bw',
+                 'skipped_session', 'time_decay_tp_count', 'skipped_min_bars',
+                 'skipped_adx_gray', 'escalated_cooldowns', 'breakeven_triggered',
+                 'skipped_pinbar', 'skipped_sr', 'pinbar_sr_entries',
+                 'skipped_fractal', 'skipped_inside_bar', 'skipped_engulf',
+                 'skipped_pa_confluence', 'skipped_daily_range',
+                 'fractal_sr_entries', 'inside_bar_sr_entries', 'engulf_sr_entries',
+                 'skipped_squeeze', 'skipped_consecutive',
+                 'partial_tp_count', 'profit_dd_exit_count', 'adaptive_hold_triggered',
+                 'timeout_profit_lock_count', 'timeout_adverse_exit_count',
+                 'timeout_momentum_exit_count', 'timeout_dynamic_extend_count',
+                 'timeout_dynamic_cut_count', 'dd_pause_count', 'dd_reduce_count',
+                 'equity_filter_skip_count']:
+        stats[attr.replace('_count', '')] = getattr(engine, attr, 0)
+    stats['session_entry_counts'] = getattr(engine, 'session_entry_counts', {})
+    stats['final_capital'] = getattr(engine, '_current_capital', 0)
+    stats['equity_peak'] = getattr(engine, '_equity_peak', 0)
+    return stats
+
+
+def _max_parallel_workers() -> int:
+    """Determine safe number of workers (leave 1 core free)."""
+    return max(1, min(os.cpu_count() - 1, 6))
+
+
 def run_variants(data: DataBundle, variants: List[Dict]) -> List[Dict]:
     """Run multiple variants sequentially.
 
@@ -479,9 +524,46 @@ def run_variants(data: DataBundle, variants: List[Dict]) -> List[Dict]:
     return results
 
 
+def run_variants_parallel(data: DataBundle, variants: List[Dict],
+                          max_workers: Optional[int] = None) -> List[Dict]:
+    """Run multiple variants in parallel using ProcessPoolExecutor.
+
+    Returns results in the same order as input variants.
+    Note: stats['_trades'] and stats['_equity_curve'] are NOT available
+    in parallel mode (not picklable / too large to transfer).
+    """
+    if max_workers is None:
+        max_workers = _max_parallel_workers()
+
+    tasks = []
+    labels = []
+    for i, v in enumerate(variants, 1):
+        label = v.pop('label', f'V{i}')
+        labels.append(label)
+        tasks.append((data.m15_df, data.h1_df, label, dict(v)))
+        v['label'] = label  # restore
+
+    print(f"  Running {len(tasks)} variants in parallel ({max_workers} workers)...", flush=True)
+    results = [None] * len(tasks)
+    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+        future_to_idx = {pool.submit(_worker_run_variant, t): i for i, t in enumerate(tasks)}
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            stats = future.result()
+            results[idx] = stats
+            print(f"    [{idx+1}/{len(tasks)}] {labels[idx]}: "
+                  f"Sharpe={stats['sharpe']:.2f}, PnL=${stats['total_pnl']:.0f}, "
+                  f"{stats['elapsed_s']}s", flush=True)
+
+    return results
+
+
 def run_kfold(data: DataBundle, engine_kwargs: Dict, n_folds: int = 6,
-              label_prefix: str = "") -> List[Dict]:
-    """Run K-Fold cross validation with fixed time windows."""
+              label_prefix: str = "", parallel: bool = False) -> List[Dict]:
+    """Run K-Fold cross validation with fixed time windows.
+
+    Set parallel=True to run folds concurrently (significant speedup).
+    """
     folds = [
         ("Fold1", "2015-01-01", "2017-01-01"),
         ("Fold2", "2017-01-01", "2019-01-01"),
@@ -491,17 +573,46 @@ def run_kfold(data: DataBundle, engine_kwargs: Dict, n_folds: int = 6,
         ("Fold6", "2025-01-01", "2026-04-01"),
     ][:n_folds]
 
-    results = []
+    valid_folds = []
     for fold_name, start, end in folds:
         fold_data = data.slice(start, end)
         if len(fold_data.m15_df) < 1000 or len(fold_data.h1_df) < 200:
             continue
         label = f"{label_prefix}{fold_name}" if label_prefix else fold_name
-        stats = run_variant(fold_data, label, **engine_kwargs)
-        stats['fold'] = fold_name
-        stats['test_start'] = start
-        stats['test_end'] = end
-        results.append(stats)
+        valid_folds.append((fold_name, start, end, fold_data, label))
+
+    if not parallel or len(valid_folds) <= 1:
+        results = []
+        for fold_name, start, end, fold_data, label in valid_folds:
+            stats = run_variant(fold_data, label, **engine_kwargs)
+            stats['fold'] = fold_name
+            stats['test_start'] = start
+            stats['test_end'] = end
+            results.append(stats)
+        return results
+
+    max_workers = _max_parallel_workers()
+    tasks = []
+    meta = []
+    for fold_name, start, end, fold_data, label in valid_folds:
+        tasks.append((fold_data.m15_df, fold_data.h1_df, label, dict(engine_kwargs)))
+        meta.append((fold_name, start, end))
+
+    print(f"  K-Fold parallel: {len(tasks)} folds, {max_workers} workers", flush=True)
+    results = [None] * len(tasks)
+    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+        future_to_idx = {pool.submit(_worker_run_variant, t): i for i, t in enumerate(tasks)}
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            stats = future.result()
+            fold_name, start, end = meta[idx]
+            stats['fold'] = fold_name
+            stats['test_start'] = start
+            stats['test_end'] = end
+            results[idx] = stats
+            print(f"    {fold_name}: Sharpe={stats['sharpe']:.2f}, "
+                  f"PnL=${stats['total_pnl']:.0f}, {stats['elapsed_s']}s", flush=True)
+
     return results
 
 

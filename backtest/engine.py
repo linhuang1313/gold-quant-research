@@ -530,13 +530,14 @@ class BacktestEngine:
         self._reset_global_state()
         total_bars = len(self.m15_df)
         lookback = self.M15_WINDOW
-        realized_pnl = 0.0
+        max_pos = self._max_pos
 
         m15_start = self.m15_df.index[lookback]
         m15_end = self.m15_df.index[-1]
         print(f"  Backtest: {m15_start.strftime('%Y-%m-%d')} -> {m15_end.strftime('%Y-%m-%d')}")
         print(f"  M15 bars: {total_bars}, H1 bars: {len(self.h1_df)}")
 
+        m15_index = self.m15_df.index
         last_pct = 0
         for i in range(lookback, total_bars):
             pct = int((i - lookback) / (total_bars - lookback) * 100) // 10 * 10
@@ -545,7 +546,7 @@ class BacktestEngine:
                 last_pct = pct
 
             bar = self.m15_df.iloc[i]
-            bar_time = self.m15_df.index[i]
+            bar_time = m15_index[i]
             bar_date = bar_time.date()
 
             if bar_date != self.current_date:
@@ -555,15 +556,20 @@ class BacktestEngine:
             is_flat = bool(bar.get('is_flat', False))
             if is_flat:
                 unrealized = self._calc_unrealized(float(bar['Close']))
-                self.equity_curve.append(config.CAPITAL + realized_pnl + unrealized)
+                self.equity_curve.append(config.CAPITAL + self._realized_pnl + unrealized)
                 continue
 
-            m15_start_idx = max(0, i - self.M15_WINDOW + 1)
-            m15_window = self.m15_df.iloc[m15_start_idx:i + 1]
-            h1_window = self._get_h1_window(bar_time)
+            h1_idx, h1_window = self._get_h1_window_with_idx(bar_time)
 
-            # 0. Execute pending entries from previous bar at this bar's Open
-            #    (avoids using the signal bar's Close as entry price)
+            need_entries = (self.daily_loss_count < config.DAILY_MAX_LOSSES
+                           and len(self.positions) < max_pos)
+
+            if need_entries or self.positions or self._pending_signals:
+                m15_start_idx = max(0, i - self.M15_WINDOW + 1)
+                m15_window = self.m15_df.iloc[m15_start_idx:i + 1]
+            else:
+                m15_window = None
+
             if self._pending_signals:
                 bar_open = float(bar['Open'])
                 for pending_sigs, pending_source in self._pending_signals:
@@ -571,17 +577,12 @@ class BacktestEngine:
                                           entry_price_override=bar_open)
                 self._pending_signals.clear()
 
-            # 1. Check exits (uses current H1 window — OK for SL/TP/trailing
-            #    since those use lagged indicators like ATR/atr_percentile)
-            self._check_exits(m15_window, h1_window, bar, bar_time)
+            if self.positions and m15_window is not None:
+                self._check_exits(m15_window, h1_window, bar, bar_time)
 
-            # 2. Generate entry signals (uses closed-only H1 to avoid look-ahead:
-            #    H1 timestamps = bar open time, so H1[14:00] is not closed
-            #    until 15:00. Entry signals must only use fully closed bars.)
-            #    Signals are queued and executed on the NEXT bar's Open.
-            if self.daily_loss_count < config.DAILY_MAX_LOSSES:
+            if need_entries and m15_window is not None:
+                h1_window_closed = self._h1_window_from_idx(h1_idx - 1) if h1_idx is not None and h1_idx > 0 else None
                 is_h1_boundary = (bar_time.minute == 0)
-                h1_window_closed = self._get_h1_window(bar_time, closed_only=True)
 
                 if is_h1_boundary and h1_window_closed is not None and len(h1_window_closed) >= 50:
                     self._check_h1_entries(h1_window_closed, bar_time)
@@ -589,9 +590,8 @@ class BacktestEngine:
                 if len(m15_window) >= 105:
                     self._check_m15_entries(m15_window, h1_window_closed, bar_time)
 
-            realized_pnl = sum(t.pnl for t in self.trades)
             unrealized = self._calc_unrealized(float(bar['Close']))
-            self.equity_curve.append(config.CAPITAL + realized_pnl + unrealized)
+            self.equity_curve.append(config.CAPITAL + self._realized_pnl + unrealized)
 
         if self.positions:
             last_bar = self.m15_df.iloc[-1]
@@ -1762,17 +1762,8 @@ class BacktestEngine:
     def _build_h1_lookup(h1_df: pd.DataFrame) -> Dict[pd.Timestamp, int]:
         return {ts: i for i, ts in enumerate(h1_df.index)}
 
-    def _get_h1_window(self, m15_time: pd.Timestamp, closed_only: bool = False) -> Optional[pd.DataFrame]:
-        """Get H1 data window aligned to m15_time.
-
-        Args:
-            closed_only: If True, exclude the current (potentially unclosed) H1 bar.
-                         H1 timestamps represent bar OPEN time (Dukascopy convention),
-                         so H1[14:00] covers 14:00-15:00 and is not closed until 15:00.
-                         At M15[14:00], H1[14:00] is still open — using its Close is
-                         look-ahead bias. With closed_only=True, the window ends at
-                         H1[13:00] instead (the last fully closed bar).
-        """
+    def _resolve_h1_idx(self, m15_time: pd.Timestamp) -> Optional[int]:
+        """Resolve the H1 bar index aligned to m15_time."""
         h1_time = m15_time.floor('h')
         if h1_time in self.h1_lookup:
             h1_idx = self.h1_lookup[h1_time]
@@ -1785,14 +1776,37 @@ class BacktestEngine:
         h1_len = len(self.h1_df)
         if h1_idx >= h1_len:
             h1_idx = h1_len - 1
+        return h1_idx
 
-        if closed_only:
-            h1_idx -= 1
-            if h1_idx < 0:
-                return None
-
+    def _h1_window_from_idx(self, h1_idx: Optional[int]) -> Optional[pd.DataFrame]:
+        """Slice H1 window from a pre-resolved index."""
+        if h1_idx is None or h1_idx < 0:
+            return None
         start = max(0, h1_idx - self.H1_WINDOW + 1)
         return self.h1_df.iloc[start:h1_idx + 1]
+
+    def _get_h1_window_with_idx(self, m15_time: pd.Timestamp):
+        """Return (h1_idx, h1_window) — avoids duplicate lookups in the hot loop."""
+        h1_idx = self._resolve_h1_idx(m15_time)
+        return h1_idx, self._h1_window_from_idx(h1_idx)
+
+    def _get_h1_window(self, m15_time: pd.Timestamp, closed_only: bool = False) -> Optional[pd.DataFrame]:
+        """Get H1 data window aligned to m15_time.
+
+        Args:
+            closed_only: If True, exclude the current (potentially unclosed) H1 bar.
+                         H1 timestamps represent bar OPEN time (Dukascopy convention),
+                         so H1[14:00] covers 14:00-15:00 and is not closed until 15:00.
+                         At M15[14:00], H1[14:00] is still open — using its Close is
+                         look-ahead bias. With closed_only=True, the window ends at
+                         H1[13:00] instead (the last fully closed bar).
+        """
+        h1_idx = self._resolve_h1_idx(m15_time)
+        if h1_idx is None:
+            return None
+        if closed_only:
+            h1_idx -= 1
+        return self._h1_window_from_idx(h1_idx)
 
     def _get_atr_percentile(self, h1_window: Optional[pd.DataFrame]) -> float:
         """Get ATR percentile using either precomputed column or live-style rolling-50."""

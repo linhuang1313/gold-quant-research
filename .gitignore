@@ -13,3 +13,14 @@ results/
 *.egg-info/
 dist/
 build/
+
+# Temp scripts (server deploy, debug, one-off analysis)
+_*.py
+_*.txt
+_*.err
+analyze*.py
+tmp_*.json
+tmp_*.txt
+
+# Junction to gold-quant-trading (2026-04-23, Windows mklink /J)
+_live/
