@@ -1,0 +1,174 @@
+================================================================================
+  R43: L8_BASE filter-combination K-Fold validation
+  Variants: 8 (KCBW5 x Cap80 x SkipUTC truth table)
+  Folds:    6 (2015 to 2026-Q1)
+  CAP_USD = $80    SKIP_HOURS (UTC) = (2, 3, 4)
+  KCBW: ema=25 mult=1.2 lookback=5
+================================================================================
+  Start: 2026-04-27 02:02:55.537802
+
+  Loading data once...
+
+Loading data...
+  M15: data\download\xauusd-m15-bid-2015-01-01-2026-04-10.csv (266882 bars, 2015-01-01 23:00:00+00:00 -> 2026-04-09 23:45:00+00:00)
+  H1: 98808 bars, 2015-01-01 00:00:00+00:00 -> 2026-04-09 23:00:00+00:00
+Preparing indicators...
+  M15... done
+  H1... done
+  M15: 266882 bars, H1: 98808 bars
+  [WARN] M15: 25 gaps > 72h detected (max: 3 days 04:30:00)
+       2015-04-02 21:00:00+00:00 -> 2015-04-05 22:00:00+00:00  (3 days 01:00:00)
+       2015-12-24 18:30:00+00:00 -> 2015-12-27 23:00:00+00:00  (3 days 04:30:00)
+       2015-12-31 21:45:00+00:00 -> 2016-01-03 23:00:00+00:00  (3 days 01:15:00)
+       2016-03-24 20:45:00+00:00 -> 2016-03-27 22:00:00+00:00  (3 days 01:15:00)
+       2016-12-23 21:45:00+00:00 -> 2016-12-26 23:00:00+00:00  (3 days 01:15:00)
+       ... and 20 more
+  [WARN] H1: 25 gaps > 72h detected (max: 3 days 05:00:00)
+       2015-04-02 21:00:00+00:00 -> 2015-04-05 22:00:00+00:00  (3 days 01:00:00)
+       2015-12-24 18:00:00+00:00 -> 2015-12-27 23:00:00+00:00  (3 days 05:00:00)
+       2015-12-31 21:00:00+00:00 -> 2016-01-03 23:00:00+00:00  (3 days 02:00:00)
+       2016-03-24 20:00:00+00:00 -> 2016-03-27 22:00:00+00:00  (3 days 02:00:00)
+       2016-12-23 21:00:00+00:00 -> 2016-12-26 23:00:00+00:00  (3 days 02:00:00)
+       ... and 20 more
+  M15: 266882 bars   H1: 98808 bars
+
+  ===== Step 1: Run L8_BASE on each fold (engine fires 6 times only) =====
+
+  [L8_BASE_Fold1]
+  Backtest: 2015-01-05 -> 2016-12-30
+  M15 bars: 47327, H1 bars: 17544
+    10%...    20%...    30%...    40%...    50%...    60%...    70%...    80%...    90%... done!
+    3736 trades (H1=3620, M15=116), Sharpe=12.58, PnL=$12081, 31s
+
+  [L8_BASE_Fold2]
+  Backtest: 2017-01-04 -> 2018-12-31
+  M15 bars: 47172, H1 bars: 17520
+    10%...    20%...    30%...    40%...    50%...    60%...    70%...    80%...    90%... done!
+    3980 trades (H1=3867, M15=113), Sharpe=12.78, PnL=$10516, 19s
+
+  [L8_BASE_Fold3]
+  Backtest: 2019-01-03 -> 2020-12-31
+  M15 bars: 47332, H1 bars: 17544
+    10%...    20%...    30%...    40%...    50%...    60%...    70%...    80%...    90%... done!
+    3828 trades (H1=3726, M15=102), Sharpe=11.67, PnL=$12443, 21s
+
+  [L8_BASE_Fold4]
+  Backtest: 2021-01-05 -> 2022-12-30
+  M15 bars: 47273, H1 bars: 17520
+    10%...    20%...    30%...    40%...    50%...    60%...    70%...    80%...    90%... done!
+    3922 trades (H1=3815, M15=107), Sharpe=12.50, PnL=$13396, 19s
+
+  [L8_BASE_Fold5]
+  Backtest: 2023-01-04 -> 2024-12-31
+  M15 bars: 47280, H1 bars: 17544
+    10%...    20%...    30%...    40%...    50%...    60%...    70%...    80%...    90%... done!
+    3808 trades (H1=3726, M15=82), Sharpe=11.26, PnL=$13003, 20s
+
+  [L8_BASE_Fold6]
+  Backtest: 2025-01-03 -> 2026-03-31
+  M15 bars: 29634, H1 bars: 10920
+    10%...    20%...    30%...    40%...    50%...    60%...    70%...    80%...    90%... done!
+    2479 trades (H1=2433, M15=46), Sharpe=10.47, PnL=$12154, 13s
+
+  ===== Step 2: Apply 8 filter combinations to each fold =====
+
+  [V0_BASELINE]  KCBW5=False Cap80=False SkipUTC=False
+    Fold1: n=3736  Sh=12.58  CorrSh=11.90  PnL=$  12081  DD=$  105
+    Fold2: n=3980  Sh=12.78  CorrSh=12.41  PnL=$  10516  DD=$   97
+    Fold3: n=3828  Sh=11.67  CorrSh=11.06  PnL=$  12443  DD=$  100
+    Fold4: n=3922  Sh=12.50  CorrSh=12.24  PnL=$  13396  DD=$   92
+    Fold5: n=3808  Sh=11.26  CorrSh=10.90  PnL=$  13003  DD=$  116
+    Fold6: n=2479  Sh=10.47  CorrSh= 9.67  PnL=$  12154  DD=$  160
+
+  [V1_KCBW5]  KCBW5=True Cap80=False SkipUTC=False
+    Fold1: n=3084  Sh=12.45  CorrSh=11.49  PnL=$  10688  DD=$  109
+    Fold2: n=3291  Sh=12.05  CorrSh=11.46  PnL=$   9106  DD=$   97
+    Fold3: n=3172  Sh=11.48  CorrSh=10.64  PnL=$  11160  DD=$   97
+    Fold4: n=3152  Sh=12.29  CorrSh=11.82  PnL=$  11570  DD=$   89
+    Fold5: n=3085  Sh=11.36  CorrSh=10.75  PnL=$  11464  DD=$   98
+    Fold6: n=2044  Sh=10.32  CorrSh= 9.16  PnL=$  11012  DD=$  154
+
+  [V2_Cap80]  KCBW5=False Cap80=True SkipUTC=False
+    Fold1: n=3736  Sh=12.58  CorrSh=11.90  PnL=$  12081  DD=$  105
+    Fold2: n=3980  Sh=12.78  CorrSh=12.41  PnL=$  10516  DD=$   97
+    Fold3: n=3828  Sh=11.67  CorrSh=11.06  PnL=$  12443  DD=$  100
+    Fold4: n=3922  Sh=12.50  CorrSh=12.24  PnL=$  13396  DD=$   92
+    Fold5: n=3808  Sh=11.26  CorrSh=10.90  PnL=$  13003  DD=$  116
+    Fold6: n=2479  Sh=10.47  CorrSh= 9.67  PnL=$  12154  DD=$  160
+
+  [V3_SkipUTC]  KCBW5=False Cap80=False SkipUTC=True
+    Fold1: n=3255  Sh=12.51  CorrSh=11.80  PnL=$  11119  DD=$   99
+    Fold2: n=3470  Sh=12.60  CorrSh=12.18  PnL=$   9708  DD=$   79
+    Fold3: n=3353  Sh=11.85  CorrSh=11.19  PnL=$  11676  DD=$   91
+    Fold4: n=3461  Sh=12.32  CorrSh=11.93  PnL=$  12014  DD=$   98
+    Fold5: n=3325  Sh=11.15  CorrSh=10.68  PnL=$  11746  DD=$   98
+    Fold6: n=2137  Sh=10.12  CorrSh= 9.26  PnL=$  10757  DD=$  160
+
+  [V4_KCBW_Cap]  KCBW5=True Cap80=True SkipUTC=False
+    Fold1: n=3084  Sh=12.45  CorrSh=11.49  PnL=$  10688  DD=$  109
+    Fold2: n=3291  Sh=12.05  CorrSh=11.46  PnL=$   9106  DD=$   97
+    Fold3: n=3172  Sh=11.48  CorrSh=10.64  PnL=$  11160  DD=$   97
+    Fold4: n=3152  Sh=12.29  CorrSh=11.82  PnL=$  11570  DD=$   89
+    Fold5: n=3085  Sh=11.36  CorrSh=10.75  PnL=$  11464  DD=$   98
+    Fold6: n=2044  Sh=10.32  CorrSh= 9.16  PnL=$  11012  DD=$  154
+
+  [V5_KCBW_Skip]  KCBW5=True Cap80=False SkipUTC=True
+    Fold1: n=2812  Sh=12.61  CorrSh=11.61  PnL=$  10157  DD=$  109
+    Fold2: n=2987  Sh=12.04  CorrSh=11.41  PnL=$   8663  DD=$   79
+    Fold3: n=2896  Sh=11.75  CorrSh=10.89  PnL=$  10711  DD=$   97
+    Fold4: n=2927  Sh=12.30  CorrSh=11.71  PnL=$  10811  DD=$   89
+    Fold5: n=2816  Sh=11.15  CorrSh=10.46  PnL=$  10611  DD=$   98
+    Fold6: n=1806  Sh=10.13  CorrSh= 8.90  PnL=$   9958  DD=$  154
+
+  [V6_Cap_Skip]  KCBW5=False Cap80=True SkipUTC=True
+    Fold1: n=3255  Sh=12.51  CorrSh=11.80  PnL=$  11119  DD=$   99
+    Fold2: n=3470  Sh=12.60  CorrSh=12.18  PnL=$   9708  DD=$   79
+    Fold3: n=3353  Sh=11.85  CorrSh=11.19  PnL=$  11676  DD=$   91
+    Fold4: n=3461  Sh=12.32  CorrSh=11.93  PnL=$  12014  DD=$   98
+    Fold5: n=3325  Sh=11.15  CorrSh=10.68  PnL=$  11746  DD=$   98
+    Fold6: n=2137  Sh=10.12  CorrSh= 9.26  PnL=$  10757  DD=$  160
+
+  [V7_ALL]  KCBW5=True Cap80=True SkipUTC=True
+    Fold1: n=2812  Sh=12.61  CorrSh=11.61  PnL=$  10157  DD=$  109
+    Fold2: n=2987  Sh=12.04  CorrSh=11.41  PnL=$   8663  DD=$   79
+    Fold3: n=2896  Sh=11.75  CorrSh=10.89  PnL=$  10711  DD=$   97
+    Fold4: n=2927  Sh=12.30  CorrSh=11.71  PnL=$  10811  DD=$   89
+    Fold5: n=2816  Sh=11.15  CorrSh=10.46  PnL=$  10611  DD=$   98
+    Fold6: n=1806  Sh=10.13  CorrSh= 8.90  PnL=$   9958  DD=$  154
+
+  ===== Step 3: Per-variant K-Fold summary =====
+
+  Variant           Pass   Sh.Mean  Sh.Min  CSh.Mean  CSh.Min     TotPnL       N
+  ---------------- -----  -------- ------- --------- -------- ---------- -------
+  V0_BASELINE      6/6 OK   11.88   10.47     11.37     9.68  $    73593   21753
+  V1_KCBW5         6/6 OK   11.66   10.32     10.89     9.16  $    65001   17828
+  V2_Cap80         6/6 OK   11.88   10.47     11.37     9.68  $    73593   21753
+  V3_SkipUTC       6/6 OK   11.76   10.12     11.17     9.26  $    67020   19001
+  V4_KCBW_Cap      6/6 OK   11.66   10.32     10.89     9.16  $    65001   17828
+  V5_KCBW_Skip     6/6 OK   11.66   10.13     10.83     8.90  $    60912   16244
+  V6_Cap_Skip      6/6 OK   11.76   10.12     11.17     9.26  $    67020   19001
+  V7_ALL           6/6 OK   11.66   10.13     10.83     8.90  $    60912   16244
+
+  ===== KEY QUESTION: Does V1 (KCBW5 alone) approx V7 (all 3) ? =====
+  Metric                         V0       V1       V7
+  ------------------------- -------- -------- --------
+  Sharpe mean                 11.88    11.66    11.66
+  Sharpe min                  10.47    10.32    10.13
+  Corrected Sharpe mean       11.37    10.89    10.83
+  Corrected Sharpe min         9.68     9.16     8.90
+  Total PnL (USD)             73593    65001    60912
+  Trades                      21753    17828    16244
+  K-Fold pass                 6/6      6/6      6/6  
+
+  Sharpe gain V0 -> V1 (KCBW5 alone):                -0.219
+  Sharpe gain V0 -> V7 (all 3 filters):              -0.214
+  Sharpe extra V1 -> V7 (Cap80 + SkipUTC marginal): +0.005
+  V1 captures 102% of V7's gain over V0.
+
+  >>> CONCLUSION: V1 ~= V7  -> Cap80 + SkipUTC are decoration; KCBW5 alone suffices.
+
+  Trade retention vs V0:    V1 keeps 82%   V7 keeps 75%
+  PnL retention vs V0:      V1 keeps 88%   V7 keeps 83%
+
+  Saved: C:\Users\hlin2\gold-quant-research\results\round43_filter_combo\R43_filter_combo.json
+  Total elapsed: 126.4s (2.11 min)

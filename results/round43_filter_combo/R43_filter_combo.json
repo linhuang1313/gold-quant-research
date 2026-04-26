@@ -1,0 +1,594 @@
+{
+  "timestamp": "2026-04-27T02:05:01.958938",
+  "cap_usd": 80,
+  "skip_hours_utc": [
+    2,
+    3,
+    4
+  ],
+  "variants_tested": 8,
+  "folds": 6,
+  "l8_base_kwargs": {
+    "trailing_activate_atr": 0.28,
+    "trailing_distance_atr": 0.06,
+    "sl_atr_mult": 3.5,
+    "tp_atr_mult": 8.0,
+    "keltner_adx_threshold": 14,
+    "regime_config": {
+      "low": {
+        "trail_act": 0.22,
+        "trail_dist": 0.04
+      },
+      "normal": {
+        "trail_act": 0.14,
+        "trail_dist": 0.025
+      },
+      "high": {
+        "trail_act": 0.06,
+        "trail_dist": 0.008
+      }
+    },
+    "intraday_adaptive": true,
+    "choppy_threshold": 0.5,
+    "time_decay_tp": false,
+    "rsi_adx_filter": 40,
+    "keltner_max_hold_m15": 20,
+    "max_positions": 1,
+    "live_atr_percentile": true,
+    "min_entry_gap_hours": 1.0
+  },
+  "summary": {
+    "V0_BASELINE": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.876,
+      "sharpe_min": 10.466,
+      "sharpe_max": 12.784,
+      "sharpe_std": 0.908,
+      "corr_sharpe_mean": 11.365,
+      "corr_sharpe_min": 9.675,
+      "pnl_total": 73593.2,
+      "n_trades_total": 21753,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 3736,
+          "sharpe": 12.58,
+          "corrected_sharpe": 11.904,
+          "total_pnl": 12081.45,
+          "max_dd": 105.45,
+          "win_rate": 93.92
+        },
+        {
+          "fold": "Fold2",
+          "n": 3980,
+          "sharpe": 12.784,
+          "corrected_sharpe": 12.406,
+          "total_pnl": 10515.91,
+          "max_dd": 97.29,
+          "win_rate": 94.8
+        },
+        {
+          "fold": "Fold3",
+          "n": 3828,
+          "sharpe": 11.666,
+          "corrected_sharpe": 11.065,
+          "total_pnl": 12443.45,
+          "max_dd": 100.24,
+          "win_rate": 94.04
+        },
+        {
+          "fold": "Fold4",
+          "n": 3922,
+          "sharpe": 12.502,
+          "corrected_sharpe": 12.242,
+          "total_pnl": 13395.65,
+          "max_dd": 92.12,
+          "win_rate": 93.75
+        },
+        {
+          "fold": "Fold5",
+          "n": 3808,
+          "sharpe": 11.26,
+          "corrected_sharpe": 10.898,
+          "total_pnl": 13002.83,
+          "max_dd": 116.29,
+          "win_rate": 93.33
+        },
+        {
+          "fold": "Fold6",
+          "n": 2479,
+          "sharpe": 10.466,
+          "corrected_sharpe": 9.675,
+          "total_pnl": 12153.91,
+          "max_dd": 160.0,
+          "win_rate": 93.47
+        }
+      ]
+    },
+    "V1_KCBW5": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.657,
+      "sharpe_min": 10.32,
+      "sharpe_max": 12.445,
+      "sharpe_std": 0.784,
+      "corr_sharpe_mean": 10.888,
+      "corr_sharpe_min": 9.158,
+      "pnl_total": 65000.55,
+      "n_trades_total": 17828,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 3084,
+          "sharpe": 12.445,
+          "corrected_sharpe": 11.493,
+          "total_pnl": 10688.49,
+          "max_dd": 109.07,
+          "win_rate": 94.36
+        },
+        {
+          "fold": "Fold2",
+          "n": 3291,
+          "sharpe": 12.048,
+          "corrected_sharpe": 11.458,
+          "total_pnl": 9105.74,
+          "max_dd": 97.29,
+          "win_rate": 94.96
+        },
+        {
+          "fold": "Fold3",
+          "n": 3172,
+          "sharpe": 11.48,
+          "corrected_sharpe": 10.644,
+          "total_pnl": 11159.64,
+          "max_dd": 97.37,
+          "win_rate": 94.42
+        },
+        {
+          "fold": "Fold4",
+          "n": 3152,
+          "sharpe": 12.286,
+          "corrected_sharpe": 11.825,
+          "total_pnl": 11570.39,
+          "max_dd": 88.56,
+          "win_rate": 94.07
+        },
+        {
+          "fold": "Fold5",
+          "n": 3085,
+          "sharpe": 11.364,
+          "corrected_sharpe": 10.748,
+          "total_pnl": 11463.92,
+          "max_dd": 97.68,
+          "win_rate": 93.74
+        },
+        {
+          "fold": "Fold6",
+          "n": 2044,
+          "sharpe": 10.32,
+          "corrected_sharpe": 9.158,
+          "total_pnl": 11012.37,
+          "max_dd": 153.69,
+          "win_rate": 93.93
+        }
+      ]
+    },
+    "V2_Cap80": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.876,
+      "sharpe_min": 10.466,
+      "sharpe_max": 12.784,
+      "sharpe_std": 0.908,
+      "corr_sharpe_mean": 11.365,
+      "corr_sharpe_min": 9.675,
+      "pnl_total": 73593.2,
+      "n_trades_total": 21753,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 3736,
+          "sharpe": 12.58,
+          "corrected_sharpe": 11.904,
+          "total_pnl": 12081.45,
+          "max_dd": 105.45,
+          "win_rate": 93.92
+        },
+        {
+          "fold": "Fold2",
+          "n": 3980,
+          "sharpe": 12.784,
+          "corrected_sharpe": 12.406,
+          "total_pnl": 10515.91,
+          "max_dd": 97.29,
+          "win_rate": 94.8
+        },
+        {
+          "fold": "Fold3",
+          "n": 3828,
+          "sharpe": 11.666,
+          "corrected_sharpe": 11.065,
+          "total_pnl": 12443.45,
+          "max_dd": 100.24,
+          "win_rate": 94.04
+        },
+        {
+          "fold": "Fold4",
+          "n": 3922,
+          "sharpe": 12.502,
+          "corrected_sharpe": 12.242,
+          "total_pnl": 13395.65,
+          "max_dd": 92.12,
+          "win_rate": 93.75
+        },
+        {
+          "fold": "Fold5",
+          "n": 3808,
+          "sharpe": 11.26,
+          "corrected_sharpe": 10.898,
+          "total_pnl": 13002.83,
+          "max_dd": 116.29,
+          "win_rate": 93.33
+        },
+        {
+          "fold": "Fold6",
+          "n": 2479,
+          "sharpe": 10.466,
+          "corrected_sharpe": 9.675,
+          "total_pnl": 12153.91,
+          "max_dd": 160.0,
+          "win_rate": 93.47
+        }
+      ]
+    },
+    "V3_SkipUTC": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.758,
+      "sharpe_min": 10.118,
+      "sharpe_max": 12.603,
+      "sharpe_std": 0.967,
+      "corr_sharpe_mean": 11.173,
+      "corr_sharpe_min": 9.256,
+      "pnl_total": 67019.89,
+      "n_trades_total": 19001,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 3255,
+          "sharpe": 12.511,
+          "corrected_sharpe": 11.8,
+          "total_pnl": 11119.4,
+          "max_dd": 98.63,
+          "win_rate": 94.1
+        },
+        {
+          "fold": "Fold2",
+          "n": 3470,
+          "sharpe": 12.603,
+          "corrected_sharpe": 12.178,
+          "total_pnl": 9707.51,
+          "max_dd": 79.15,
+          "win_rate": 94.81
+        },
+        {
+          "fold": "Fold3",
+          "n": 3353,
+          "sharpe": 11.846,
+          "corrected_sharpe": 11.19,
+          "total_pnl": 11676.09,
+          "max_dd": 90.85,
+          "win_rate": 94.15
+        },
+        {
+          "fold": "Fold4",
+          "n": 3461,
+          "sharpe": 12.324,
+          "corrected_sharpe": 11.929,
+          "total_pnl": 12013.94,
+          "max_dd": 97.87,
+          "win_rate": 93.73
+        },
+        {
+          "fold": "Fold5",
+          "n": 3325,
+          "sharpe": 11.146,
+          "corrected_sharpe": 10.683,
+          "total_pnl": 11745.7,
+          "max_dd": 97.68,
+          "win_rate": 93.23
+        },
+        {
+          "fold": "Fold6",
+          "n": 2137,
+          "sharpe": 10.118,
+          "corrected_sharpe": 9.256,
+          "total_pnl": 10757.25,
+          "max_dd": 160.0,
+          "win_rate": 93.36
+        }
+      ]
+    },
+    "V4_KCBW_Cap": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.657,
+      "sharpe_min": 10.32,
+      "sharpe_max": 12.445,
+      "sharpe_std": 0.784,
+      "corr_sharpe_mean": 10.888,
+      "corr_sharpe_min": 9.158,
+      "pnl_total": 65000.55,
+      "n_trades_total": 17828,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 3084,
+          "sharpe": 12.445,
+          "corrected_sharpe": 11.493,
+          "total_pnl": 10688.49,
+          "max_dd": 109.07,
+          "win_rate": 94.36
+        },
+        {
+          "fold": "Fold2",
+          "n": 3291,
+          "sharpe": 12.048,
+          "corrected_sharpe": 11.458,
+          "total_pnl": 9105.74,
+          "max_dd": 97.29,
+          "win_rate": 94.96
+        },
+        {
+          "fold": "Fold3",
+          "n": 3172,
+          "sharpe": 11.48,
+          "corrected_sharpe": 10.644,
+          "total_pnl": 11159.64,
+          "max_dd": 97.37,
+          "win_rate": 94.42
+        },
+        {
+          "fold": "Fold4",
+          "n": 3152,
+          "sharpe": 12.286,
+          "corrected_sharpe": 11.825,
+          "total_pnl": 11570.39,
+          "max_dd": 88.56,
+          "win_rate": 94.07
+        },
+        {
+          "fold": "Fold5",
+          "n": 3085,
+          "sharpe": 11.364,
+          "corrected_sharpe": 10.748,
+          "total_pnl": 11463.92,
+          "max_dd": 97.68,
+          "win_rate": 93.74
+        },
+        {
+          "fold": "Fold6",
+          "n": 2044,
+          "sharpe": 10.32,
+          "corrected_sharpe": 9.158,
+          "total_pnl": 11012.37,
+          "max_dd": 153.69,
+          "win_rate": 93.93
+        }
+      ]
+    },
+    "V5_KCBW_Skip": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.662,
+      "sharpe_min": 10.13,
+      "sharpe_max": 12.61,
+      "sharpe_std": 0.902,
+      "corr_sharpe_mean": 10.83,
+      "corr_sharpe_min": 8.904,
+      "pnl_total": 60911.83,
+      "n_trades_total": 16244,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 2812,
+          "sharpe": 12.61,
+          "corrected_sharpe": 11.605,
+          "total_pnl": 10156.59,
+          "max_dd": 109.07,
+          "win_rate": 94.42
+        },
+        {
+          "fold": "Fold2",
+          "n": 2987,
+          "sharpe": 12.041,
+          "corrected_sharpe": 11.412,
+          "total_pnl": 8663.43,
+          "max_dd": 79.15,
+          "win_rate": 94.88
+        },
+        {
+          "fold": "Fold3",
+          "n": 2896,
+          "sharpe": 11.747,
+          "corrected_sharpe": 10.886,
+          "total_pnl": 10710.9,
+          "max_dd": 97.37,
+          "win_rate": 94.51
+        },
+        {
+          "fold": "Fold4",
+          "n": 2927,
+          "sharpe": 12.296,
+          "corrected_sharpe": 11.713,
+          "total_pnl": 10811.38,
+          "max_dd": 88.56,
+          "win_rate": 94.02
+        },
+        {
+          "fold": "Fold5",
+          "n": 2816,
+          "sharpe": 11.147,
+          "corrected_sharpe": 10.46,
+          "total_pnl": 10611.43,
+          "max_dd": 97.68,
+          "win_rate": 93.54
+        },
+        {
+          "fold": "Fold6",
+          "n": 1806,
+          "sharpe": 10.13,
+          "corrected_sharpe": 8.904,
+          "total_pnl": 9958.1,
+          "max_dd": 153.69,
+          "win_rate": 93.85
+        }
+      ]
+    },
+    "V6_Cap_Skip": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.758,
+      "sharpe_min": 10.118,
+      "sharpe_max": 12.603,
+      "sharpe_std": 0.967,
+      "corr_sharpe_mean": 11.173,
+      "corr_sharpe_min": 9.256,
+      "pnl_total": 67019.89,
+      "n_trades_total": 19001,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 3255,
+          "sharpe": 12.511,
+          "corrected_sharpe": 11.8,
+          "total_pnl": 11119.4,
+          "max_dd": 98.63,
+          "win_rate": 94.1
+        },
+        {
+          "fold": "Fold2",
+          "n": 3470,
+          "sharpe": 12.603,
+          "corrected_sharpe": 12.178,
+          "total_pnl": 9707.51,
+          "max_dd": 79.15,
+          "win_rate": 94.81
+        },
+        {
+          "fold": "Fold3",
+          "n": 3353,
+          "sharpe": 11.846,
+          "corrected_sharpe": 11.19,
+          "total_pnl": 11676.09,
+          "max_dd": 90.85,
+          "win_rate": 94.15
+        },
+        {
+          "fold": "Fold4",
+          "n": 3461,
+          "sharpe": 12.324,
+          "corrected_sharpe": 11.929,
+          "total_pnl": 12013.94,
+          "max_dd": 97.87,
+          "win_rate": 93.73
+        },
+        {
+          "fold": "Fold5",
+          "n": 3325,
+          "sharpe": 11.146,
+          "corrected_sharpe": 10.683,
+          "total_pnl": 11745.7,
+          "max_dd": 97.68,
+          "win_rate": 93.23
+        },
+        {
+          "fold": "Fold6",
+          "n": 2137,
+          "sharpe": 10.118,
+          "corrected_sharpe": 9.256,
+          "total_pnl": 10757.25,
+          "max_dd": 160.0,
+          "win_rate": 93.36
+        }
+      ]
+    },
+    "V7_ALL": {
+      "n_folds": 6,
+      "kfold_pass_count": 6,
+      "kfold_pass": true,
+      "sharpe_mean": 11.662,
+      "sharpe_min": 10.13,
+      "sharpe_max": 12.61,
+      "sharpe_std": 0.902,
+      "corr_sharpe_mean": 10.83,
+      "corr_sharpe_min": 8.904,
+      "pnl_total": 60911.83,
+      "n_trades_total": 16244,
+      "per_fold": [
+        {
+          "fold": "Fold1",
+          "n": 2812,
+          "sharpe": 12.61,
+          "corrected_sharpe": 11.605,
+          "total_pnl": 10156.59,
+          "max_dd": 109.07,
+          "win_rate": 94.42
+        },
+        {
+          "fold": "Fold2",
+          "n": 2987,
+          "sharpe": 12.041,
+          "corrected_sharpe": 11.412,
+          "total_pnl": 8663.43,
+          "max_dd": 79.15,
+          "win_rate": 94.88
+        },
+        {
+          "fold": "Fold3",
+          "n": 2896,
+          "sharpe": 11.747,
+          "corrected_sharpe": 10.886,
+          "total_pnl": 10710.9,
+          "max_dd": 97.37,
+          "win_rate": 94.51
+        },
+        {
+          "fold": "Fold4",
+          "n": 2927,
+          "sharpe": 12.296,
+          "corrected_sharpe": 11.713,
+          "total_pnl": 10811.38,
+          "max_dd": 88.56,
+          "win_rate": 94.02
+        },
+        {
+          "fold": "Fold5",
+          "n": 2816,
+          "sharpe": 11.147,
+          "corrected_sharpe": 10.46,
+          "total_pnl": 10611.43,
+          "max_dd": 97.68,
+          "win_rate": 93.54
+        },
+        {
+          "fold": "Fold6",
+          "n": 1806,
+          "sharpe": 10.13,
+          "corrected_sharpe": 8.904,
+          "total_pnl": 9958.1,
+          "max_dd": 153.69,
+          "win_rate": 93.85
+        }
+      ]
+    }
+  }
+}
