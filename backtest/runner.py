@@ -108,9 +108,9 @@ def check_data_gaps(df: pd.DataFrame, label: str, expected_freq: str):
     threshold = pd.Timedelta(hours=72)
     large_gaps = diffs_nf[diffs_nf > threshold]
     if len(large_gaps) > 0:
-        print(f"  ⚠️  {label}: {len(large_gaps)} gaps > 72h detected (max: {max_gap})")
+        print(f"  [WARN] {label}: {len(large_gaps)} gaps > 72h detected (max: {max_gap})")
         for ts, gap in large_gaps.head(5).items():
-            print(f"       {ts - gap} → {ts}  ({gap})")
+            print(f"       {ts - gap} -> {ts}  ({gap})")
         if len(large_gaps) > 5:
             print(f"       ... and {len(large_gaps) - 5} more")
     else:
@@ -119,7 +119,7 @@ def check_data_gaps(df: pd.DataFrame, label: str, expected_freq: str):
         expected_bars = date_range / freq_minutes
         coverage = total_bars / expected_bars if expected_bars > 0 else 1
         if coverage < 0.90:
-            print(f"  ⚠️  {label}: coverage={coverage:.1%} (expected ~{expected_bars:.0f} bars, got {total_bars})")
+            print(f"  [WARN] {label}: coverage={coverage:.1%} (expected ~{expected_bars:.0f} bars, got {total_bars})")
 
 
 def add_atr_percentile(h1_df: pd.DataFrame) -> pd.DataFrame:

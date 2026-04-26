@@ -1,0 +1,4 @@
+__pycache__/
+results/p1_h1_arrays*.json
+results/p1_full_run2.json
+results/profile.prof

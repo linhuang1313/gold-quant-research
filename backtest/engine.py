@@ -524,6 +524,228 @@ class BacktestEngine:
         self.skipped_adx_gray = 0
         self.escalated_cooldowns = 0
 
+        # ── P1: H1 column pre-extraction ──────────────────────────
+        # Profile showed 52,723 calls to fast_xs (h1_window.iloc[-1])
+        # accounting for ~3.94s self time. Pre-extracting columns as
+        # numpy arrays lets us use O(1) array[h1_idx] access instead.
+        self._build_h1_arrays()
+
+    def _build_h1_arrays(self):
+        """Pre-extract hot H1 columns as numpy arrays for O(1) row access."""
+        h1_df = self.h1_df
+        n = len(h1_df)
+        self._h1_n = n
+
+        def _arr(col, default):
+            if col in h1_df.columns:
+                return np.ascontiguousarray(h1_df[col].to_numpy(dtype=np.float64))
+            return np.full(n, default, dtype=np.float64)
+
+        self._h1_atr_arr = _arr('ATR', 0.0)
+        self._h1_atr_pct_arr = _arr('atr_percentile', 0.5)
+        self._h1_adx_arr = _arr('ADX', 0.0)
+        self._h1_ema100_arr = _arr('EMA100', np.nan)
+        self._h1_kc_upper_arr = _arr('KC_upper', np.nan)
+        self._h1_kc_lower_arr = _arr('KC_lower', np.nan)
+        self._h1_kc_mid_arr = _arr('KC_mid', np.nan)
+        self._h1_close_arr = _arr('Close', np.nan)
+
+        # Pre-compute live atr percentile (rolling-50 rank) so
+        # _get_atr_percentile_at() with live_atr_percentile=True is O(1)
+        # instead of doing dropna + rolling mean on every call.
+        if self._live_atr_pct:
+            self._h1_atr_pct_live_arr = self._compute_live_atr_pct_array()
+        else:
+            self._h1_atr_pct_live_arr = None
+
+        # Pre-compute "today's bar count up to and including h1_idx" so the
+        # _check_h1_entries `min_h1_bars_today` filter is O(1).
+        # Also start_of_day index and per-h1 score/regime for the
+        # _update_intraday_score replacement (was 28% of run time).
+        self._h1_start_of_day_arr = self._compute_start_of_day()
+        self._h1_today_count_arr = (
+            np.arange(n) - self._h1_start_of_day_arr + 1
+        ).astype(np.int64)
+        if self._intraday_adaptive:
+            self._build_intraday_score_arrays()
+        else:
+            self._h1_score_arr = None
+            self._h1_regime_arr = None
+
+    def _compute_start_of_day(self) -> np.ndarray:
+        """For each H1 bar, return the first index of the same UTC date."""
+        h1 = self.h1_df
+        n = len(h1)
+        out = np.empty(n, dtype=np.int64)
+        if n == 0:
+            return out
+        dates = h1.index.date
+        prev_date = None
+        cur_start = 0
+        for i in range(n):
+            d = dates[i]
+            if d != prev_date:
+                cur_start = i
+                prev_date = d
+            out[i] = cur_start
+        return out
+
+    def _build_intraday_score_arrays(self):
+        """Vectorize _update_intraday_score: pre-compute score & regime per H1 bar.
+
+        The legacy logic in _update_intraday_score / _calc_realtime_score is a
+        pure function of H1 bars on the same date up to (and including) h1_idx.
+        We compute it once at init so the runtime path becomes
+        ``score, regime = self._h1_score_arr[i], self._h1_regime_arr[i]`` (O(1)).
+
+        Profile (post-P1) attributed 12.5s / 28% of total run time to this
+        path.  After this pre-computation runtime should drop to ~0.
+        """
+        h1 = self.h1_df
+        n = self._h1_n
+        if n == 0:
+            self._h1_score_arr = np.full(0, 0.5, dtype=np.float64)
+            self._h1_regime_arr = np.empty(0, dtype=object)
+            return
+
+        adx = self._h1_adx_arr
+        close = self._h1_close_arr
+        kc_u = self._h1_kc_upper_arr
+        kc_l = self._h1_kc_lower_arr
+
+        def _arr2(col):
+            return (np.ascontiguousarray(h1[col].to_numpy(dtype=np.float64))
+                    if col in h1.columns
+                    else np.full(n, np.nan, dtype=np.float64))
+
+        open_arr = _arr2('Open')
+        high_arr = _arr2('High')
+        low_arr = _arr2('Low')
+        ema9_arr = _arr2('EMA9')
+        ema21_arr = _arr2('EMA21')
+        ema100_arr = self._h1_ema100_arr
+
+        # KC break boolean -> float (0.0 / 1.0); NaN-safe -> 0.0
+        valid_kc = ~(np.isnan(close) | np.isnan(kc_u) | np.isnan(kc_l))
+        kc_break = np.where(
+            valid_kc,
+            ((close > kc_u) | (close < kc_l)).astype(np.float64),
+            0.0,
+        )
+
+        valid_ema = ~(np.isnan(ema9_arr) | np.isnan(ema21_arr) | np.isnan(ema100_arr))
+        ema_aligned = np.where(
+            valid_ema,
+            (((ema9_arr > ema21_arr) & (ema21_arr > ema100_arr))
+             | ((ema9_arr < ema21_arr) & (ema21_arr < ema100_arr))).astype(np.float64),
+            0.0,
+        )
+
+        cum_kc = np.zeros(n + 1, dtype=np.float64)
+        cum_kc[1:] = np.cumsum(kc_break)
+        cum_ema = np.zeros(n + 1, dtype=np.float64)
+        cum_ema[1:] = np.cumsum(ema_aligned)
+
+        sod = self._h1_start_of_day_arr
+        n_bars = self._h1_today_count_arr
+
+        adx_safe = np.where(np.isnan(adx), 20.0, adx)
+        adx_score = np.minimum(adx_safe / 40.0, 1.0)
+
+        # Range-sum / n_bars (kc_score, ema_score) — all vectorized
+        denom = np.maximum(n_bars, 1).astype(np.float64)
+        kc_score = np.minimum((cum_kc[np.arange(n) + 1] - cum_kc[sod]) / denom, 1.0)
+        ema_score = (cum_ema[np.arange(n) + 1] - cum_ema[sod]) / denom
+
+        # day_high / day_low / day_open via per-bar slice (Python loop, n=11k -> fast)
+        score_arr = np.full(n, 0.5, dtype=np.float64)
+        regime_arr = np.empty(n, dtype=object)
+        regime_arr[:] = 'neutral'
+
+        for i in range(n):
+            if n_bars[i] < 2:
+                score_arr[i] = 0.5
+                regime_arr[i] = 'neutral'
+                continue
+            s = sod[i]
+            day_open = open_arr[s]
+            day_close = close[i]
+            day_high = np.nanmax(high_arr[s:i + 1])
+            day_low = np.nanmin(low_arr[s:i + 1])
+            day_range = day_high - day_low
+            if (not np.isnan(day_open) and not np.isnan(day_close)
+                    and not np.isnan(day_range) and day_range > 0.01):
+                ti = abs(day_close - day_open) / day_range
+            else:
+                ti = 0.0
+            score = round(
+                0.30 * adx_score[i] + 0.25 * kc_score[i]
+                + 0.25 * ema_score[i] + 0.20 * ti,
+                3,
+            )
+            score_arr[i] = score
+            if score >= self._kc_only_threshold:
+                regime_arr[i] = 'trending'
+            elif score >= self._choppy_threshold:
+                regime_arr[i] = 'neutral'
+            else:
+                regime_arr[i] = 'choppy'
+
+        self._h1_score_arr = score_arr
+        self._h1_regime_arr = regime_arr
+
+    def _compute_live_atr_pct_array(self) -> np.ndarray:
+        """Vectorize the live rolling-50 ATR percentile rank.
+
+        Replicates the legacy logic in _get_atr_percentile():
+            atr_series = h1_window['ATR'].dropna()
+            if len(atr_series) >= 50:
+                cur = atr_series.iloc[-1]
+                return (atr_series.iloc[-50:] < cur).mean()
+            return 0.5
+        """
+        atr = self._h1_atr_arr
+        n = len(atr)
+        out = np.full(n, 0.5, dtype=np.float64)
+        nan_mask = np.isnan(atr)
+
+        # Build "non-NaN" rolling buffer of 50 most recent values for each i.
+        # For each H1 bar i, scan back to collect 50 non-NaN ATR values
+        # ending at i.  ATR has 14-bar warmup so non-NaN density is ~100%
+        # after that; scanning back at most 200 bars is safe.
+        max_lookback = 200
+        for i in range(n):
+            if nan_mask[i]:
+                continue
+            start = max(0, i - max_lookback + 1)
+            window = atr[start:i + 1]
+            wmask = ~np.isnan(window)
+            non_nan = window[wmask]
+            if len(non_nan) >= 50:
+                cur = non_nan[-1]
+                last50 = non_nan[-50:]
+                # Match legacy semantics: strict less-than count / 50
+                out[i] = float((last50 < cur).sum()) / 50.0
+        return out
+
+    # ── P1: H1 array fast accessors ─────────────────────────────
+
+    def _get_h1_atr_at(self, h1_idx: Optional[int]) -> float:
+        """O(1) replacement for _get_h1_atr(h1_window) using pre-extracted arrays."""
+        if h1_idx is None or h1_idx < 0 or h1_idx >= self._h1_n:
+            return 0.0
+        val = self._h1_atr_arr[h1_idx]
+        return 0.0 if np.isnan(val) else float(val)
+
+    def _get_atr_percentile_at(self, h1_idx: Optional[int]) -> float:
+        """O(1) replacement for _get_atr_percentile(h1_window)."""
+        if h1_idx is None or h1_idx < 0 or h1_idx >= self._h1_n:
+            return 0.5
+        if self._live_atr_pct:
+            return float(self._h1_atr_pct_live_arr[h1_idx])
+        val = self._h1_atr_pct_arr[h1_idx]
+        return 0.5 if np.isnan(val) else float(val)
+
     # ── Main loop ─────────────────────────────────────────────
 
     def run(self) -> List[TradeRecord]:
@@ -574,21 +796,23 @@ class BacktestEngine:
                 bar_open = float(bar['Open'])
                 for pending_sigs, pending_source in self._pending_signals:
                     self._process_signals(pending_sigs, bar_time, pending_source,
-                                          entry_price_override=bar_open)
+                                          entry_price_override=bar_open,
+                                          h1_idx=h1_idx)
                 self._pending_signals.clear()
 
             if self.positions and m15_window is not None:
-                self._check_exits(m15_window, h1_window, bar, bar_time)
+                self._check_exits(m15_window, h1_window, bar, bar_time, h1_idx=h1_idx)
 
             if need_entries and m15_window is not None:
-                h1_window_closed = self._h1_window_from_idx(h1_idx - 1) if h1_idx is not None and h1_idx > 0 else None
+                h1_idx_closed = h1_idx - 1 if h1_idx is not None and h1_idx > 0 else None
+                h1_window_closed = self._h1_window_from_idx(h1_idx_closed) if h1_idx_closed is not None else None
                 is_h1_boundary = (bar_time.minute == 0)
 
                 if is_h1_boundary and h1_window_closed is not None and len(h1_window_closed) >= 50:
-                    self._check_h1_entries(h1_window_closed, bar_time)
+                    self._check_h1_entries(h1_window_closed, bar_time, h1_idx=h1_idx_closed)
 
                 if len(m15_window) >= 105:
-                    self._check_m15_entries(m15_window, h1_window_closed, bar_time)
+                    self._check_m15_entries(m15_window, h1_window_closed, bar_time, h1_idx=h1_idx_closed)
 
             unrealized = self._calc_unrealized(float(bar['Close']))
             self.equity_curve.append(config.CAPITAL + self._realized_pnl + unrealized)
@@ -604,14 +828,15 @@ class BacktestEngine:
 
     # ── Exits ─────────────────────────────────────────────────
 
-    def _check_exits(self, m15_window, h1_window, bar, bar_time):
+    def _check_exits(self, m15_window, h1_window, bar, bar_time, *,
+                     h1_idx: Optional[int] = None):
         high = float(bar['High'])
         low = float(bar['Low'])
         close = float(bar['Close'])
 
         # Apply regime-adaptive parameters if configured
-        if self._regime_config and h1_window is not None and len(h1_window) > 0:
-            atr_pct = self._get_atr_percentile(h1_window)
+        if self._regime_config and h1_idx is not None and h1_idx >= 0:
+            atr_pct = self._get_atr_percentile_at(h1_idx)
             regime = 'low' if atr_pct < 0.30 else ('high' if atr_pct > 0.70 else 'normal')
             rc = self._regime_config.get(regime, {})
             self._trail_act = rc.get('trail_act', self._trail_act_base)
@@ -641,7 +866,7 @@ class BacktestEngine:
 
             # 1b. Breakeven stop: move SL to entry when profit exceeds threshold
             if not reason and self._breakeven_after_atr > 0 and pos.strategy == 'keltner':
-                atr_be = self._get_h1_atr(h1_window)
+                atr_be = self._get_h1_atr_at(h1_idx)
                 if atr_be > 0:
                     be_threshold = atr_be * self._breakeven_after_atr
                     if pos.direction == 'BUY':
@@ -656,7 +881,7 @@ class BacktestEngine:
             # 1c. Progressive SL tightening: reduce SL distance as bars_held increases
             if (not reason and self._prog_sl_start > 0 and self._prog_sl_steps > 0
                     and pos.bars_held >= self._prog_sl_start and pos.strategy == 'keltner'):
-                atr_prog = self._get_h1_atr(h1_window)
+                atr_prog = self._get_h1_atr_at(h1_idx)
                 if atr_prog > 0:
                     bars_past = pos.bars_held - self._prog_sl_start
                     step_size = (self._sl_atr_mult - self._prog_sl_target) / self._prog_sl_steps
@@ -677,7 +902,7 @@ class BacktestEngine:
             if not reason and pos.strategy == 'keltner' and config.TRAILING_STOP_ENABLED:
                 act_atr = self._trail_act or config.TRAILING_ACTIVATE_ATR
                 dist_atr = self._trail_dist or config.TRAILING_DISTANCE_ATR
-                atr = self._get_h1_atr(h1_window)
+                atr = self._get_h1_atr_at(h1_idx)
                 if atr > 0:
                     # ATR spike protection: tighten trailing when volatility surges
                     if (self._atr_spike_protection
@@ -740,7 +965,7 @@ class BacktestEngine:
                     and pos.bars_held >= self._td_start_bars):
                 trailing_activated = (pos.trailing_stop_price > 0) if pos.direction == 'BUY' else (pos.trailing_stop_price > 0)
                 if not trailing_activated:
-                    atr_td = self._get_h1_atr(h1_window) if h1_window is not None else 0
+                    atr_td = self._get_h1_atr_at(h1_idx)
                     if atr_td > 0:
                         decay_bars = pos.bars_held - self._td_start_bars
                         min_profit_atr = max(0.0, self._td_atr_start - decay_bars * self._td_atr_step_per_bar)
@@ -796,7 +1021,7 @@ class BacktestEngine:
 
                 # R16: Dynamic timeout — extend if profitable, cut if adverse
                 if self._timeout_dynamic and pos.strategy == 'keltner':
-                    atr_dyn = self._get_h1_atr(h1_window) if h1_window is not None else 0
+                    atr_dyn = self._get_h1_atr_at(h1_idx)
                     if atr_dyn > 0:
                         if pos.direction == 'BUY':
                             pnl_atr = (close - pos.entry_price) / atr_dyn
@@ -814,7 +1039,7 @@ class BacktestEngine:
                         and pos.strategy == 'keltner'):
                     lock_bar = self._timeout_profit_lock_bar if self._timeout_profit_lock_bar > 0 else max(1, max_hold - 2)
                     if pos.bars_held >= lock_bar:
-                        atr_lock = self._get_h1_atr(h1_window) if h1_window is not None else 0
+                        atr_lock = self._get_h1_atr_at(h1_idx)
                         if atr_lock > 0:
                             if pos.direction == 'BUY':
                                 float_pnl = close - pos.entry_price
@@ -864,7 +1089,7 @@ class BacktestEngine:
                     exit_price = close
 
             if reason:
-                self._close_position(pos, exit_price, bar_time, reason)
+                self._close_position(pos, exit_price, bar_time, reason, h1_idx=h1_idx)
 
     def _dual_kc_levels_last(self, h1_window: pd.DataFrame) -> Optional[Dict]:
         need = max(self._dual_kc_fast_ema, self._dual_kc_slow_ema) + 2
@@ -928,7 +1153,7 @@ class BacktestEngine:
 
     # ── H1 Entries ────────────────────────────────────────────
 
-    def _check_h1_entries(self, h1_window, bar_time):
+    def _check_h1_entries(self, h1_window, bar_time, *, h1_idx: Optional[int] = None):
         if len(self.positions) >= self._max_pos:
             return
 
@@ -948,18 +1173,23 @@ class BacktestEngine:
 
         # Min H1 bars today: don't trade before enough intraday data
         if self._min_h1_bars_today > 0 and self._intraday_adaptive:
-            bar_date = pd.Timestamp(bar_time).date()
-            indices = self._h1_date_map.get(bar_date, [])
-            h1_time = pd.Timestamp(bar_time).floor('h')
-            max_idx = self.h1_lookup.get(h1_time, -1)
-            today_count = len([i for i in indices if i <= max_idx]) if max_idx >= 0 else 0
+            if h1_idx is not None and 0 <= h1_idx < self._h1_n:
+                today_count = int(self._h1_today_count_arr[h1_idx])
+            else:
+                bar_date = pd.Timestamp(bar_time).date()
+                indices = self._h1_date_map.get(bar_date, [])
+                h1_time = pd.Timestamp(bar_time).floor('h')
+                max_idx = self.h1_lookup.get(h1_time, -1)
+                today_count = len([i for i in indices if i <= max_idx]) if max_idx >= 0 else 0
             if today_count < self._min_h1_bars_today:
                 self.skipped_min_bars += 1
                 return
 
         # ADX gray zone: require higher trend_score when ADX is marginal
-        if self._adx_gray_zone > 0 and self._intraday_adaptive and h1_window is not None and len(h1_window) > 0:
-            adx_val = float(h1_window.iloc[-1].get('ADX', 0))
+        if self._adx_gray_zone > 0 and self._intraday_adaptive and h1_idx is not None and h1_idx >= 0:
+            adx_val = self._h1_adx_arr[h1_idx]
+            if np.isnan(adx_val):
+                adx_val = 0.0
             adx_threshold = self._kc_adx_threshold or signals_mod.ADX_TREND_THRESHOLD
             if adx_threshold <= adx_val < adx_threshold + self._adx_gray_zone:
                 if self._current_score < self._adx_gray_zone_min_score:
@@ -983,8 +1213,8 @@ class BacktestEngine:
                 pass
 
         # Regime-based disable
-        if self._regime_config and h1_window is not None and len(h1_window) > 0:
-            atr_pct = self._get_atr_percentile(h1_window)
+        if self._regime_config and h1_idx is not None and h1_idx >= 0:
+            atr_pct = self._get_atr_percentile_at(h1_idx)
             regime = 'low' if atr_pct < 0.30 else ('high' if atr_pct > 0.70 else 'normal')
             rc = self._regime_config.get(regime, {})
             if rc.get('disable_keltner', False):
@@ -1005,14 +1235,18 @@ class BacktestEngine:
             return
 
         # KC bandwidth expanding filter: block keltner entries when bandwidth is contracting
-        if self._kc_bw_filter_bars > 0 and h1_window is not None and len(h1_window) > self._kc_bw_filter_bars:
-            kc_u = h1_window.iloc[-1].get('KC_upper', 0)
-            kc_l = h1_window.iloc[-1].get('KC_lower', 0)
-            kc_m = h1_window.iloc[-1].get('KC_mid', 1)
-            kc_u_prev = h1_window.iloc[-1 - self._kc_bw_filter_bars].get('KC_upper', 0)
-            kc_l_prev = h1_window.iloc[-1 - self._kc_bw_filter_bars].get('KC_lower', 0)
-            kc_m_prev = h1_window.iloc[-1 - self._kc_bw_filter_bars].get('KC_mid', 1)
-            if not any(pd.isna(v) for v in [kc_u, kc_l, kc_m, kc_u_prev, kc_l_prev, kc_m_prev]) and kc_m > 0 and kc_m_prev > 0:
+        if (self._kc_bw_filter_bars > 0 and h1_idx is not None
+                and h1_idx - self._kc_bw_filter_bars >= 0):
+            prev_idx = h1_idx - self._kc_bw_filter_bars
+            kc_u = self._h1_kc_upper_arr[h1_idx]
+            kc_l = self._h1_kc_lower_arr[h1_idx]
+            kc_m = self._h1_kc_mid_arr[h1_idx]
+            kc_u_prev = self._h1_kc_upper_arr[prev_idx]
+            kc_l_prev = self._h1_kc_lower_arr[prev_idx]
+            kc_m_prev = self._h1_kc_mid_arr[prev_idx]
+            if (not (np.isnan(kc_u) or np.isnan(kc_l) or np.isnan(kc_m)
+                     or np.isnan(kc_u_prev) or np.isnan(kc_l_prev) or np.isnan(kc_m_prev))
+                    and kc_m > 0 and kc_m_prev > 0):
                 bw_now = (kc_u - kc_l) / kc_m
                 bw_prev = (kc_u_prev - kc_l_prev) / kc_m_prev
                 if bw_now <= bw_prev:
@@ -1066,10 +1300,11 @@ class BacktestEngine:
                     return
 
         # EMA slope filter: block BUY when EMA100 is declining
-        if self._block_buy_ema_slope > 0 and h1_window is not None and len(h1_window) >= self._block_buy_ema_slope:
-            ema_now = float(h1_window.iloc[-1].get('EMA100', 0))
-            ema_prev = float(h1_window.iloc[-self._block_buy_ema_slope].get('EMA100', 0))
-            if ema_now < ema_prev:
+        if (self._block_buy_ema_slope > 0 and h1_idx is not None
+                and h1_idx - self._block_buy_ema_slope + 1 >= 0):
+            ema_now = self._h1_ema100_arr[h1_idx]
+            ema_prev = self._h1_ema100_arr[h1_idx - self._block_buy_ema_slope + 1]
+            if not (np.isnan(ema_now) or np.isnan(ema_prev)) and ema_now < ema_prev:
                 signals = [s for s in signals if s.get('direction') != 'BUY']
                 if not signals:
                     self.skipped_ema_slope += 1
@@ -1335,7 +1570,8 @@ class BacktestEngine:
 
     # ── M15 Entries ───────────────────────────────────────────
 
-    def _check_m15_entries(self, m15_window, h1_window, bar_time):
+    def _check_m15_entries(self, m15_window, h1_window, bar_time, *,
+                           h1_idx: Optional[int] = None):
         if len(self.positions) >= self._max_pos:
             return
 
@@ -1349,8 +1585,8 @@ class BacktestEngine:
                 return
 
         # Regime-based disable
-        if self._regime_config and h1_window is not None and len(h1_window) > 0:
-            atr_pct = self._get_atr_percentile(h1_window)
+        if self._regime_config and h1_idx is not None and h1_idx >= 0:
+            atr_pct = self._get_atr_percentile_at(h1_idx)
             regime = 'low' if atr_pct < 0.30 else ('high' if atr_pct > 0.70 else 'normal')
             rc = self._regime_config.get(regime, {})
             if rc.get('disable_rsi', False):
@@ -1358,7 +1594,7 @@ class BacktestEngine:
 
         # Custom RSI thresholds — bypass scan_all_signals
         if self._rsi_buy_threshold > 0 or self._rsi_sell_threshold > 0:
-            self._check_m15_custom_rsi(m15_window, h1_window, bar_time)
+            self._check_m15_custom_rsi(m15_window, h1_window, bar_time, h1_idx=h1_idx)
             return
 
         signals = signals_mod.scan_all_signals(m15_window, 'M15')
@@ -1374,20 +1610,20 @@ class BacktestEngine:
                 self.rsi_filtered_count += 1
                 blocked = True
 
-            if not blocked and self._rsi_adx_filter > 0 and h1_window is not None and len(h1_window) > 0:
-                adx_val = float(h1_window.iloc[-1].get('ADX', 0))
-                if not pd.isna(adx_val) and adx_val > self._rsi_adx_filter:
+            if not blocked and self._rsi_adx_filter > 0 and h1_idx is not None and h1_idx >= 0:
+                adx_val = self._h1_adx_arr[h1_idx]
+                if not np.isnan(adx_val) and adx_val > self._rsi_adx_filter:
                     self.rsi_filtered_count += 1
                     blocked = True
 
-            if not blocked and self._rsi_atr_pct_filter > 0 and h1_window is not None and len(h1_window) > 0:
-                atr_pct = self._get_atr_percentile(h1_window)
+            if not blocked and self._rsi_atr_pct_filter > 0 and h1_idx is not None and h1_idx >= 0:
+                atr_pct = self._get_atr_percentile_at(h1_idx)
                 if atr_pct > self._rsi_atr_pct_filter:
                     self.rsi_filtered_count += 1
                     blocked = True
 
-            if not blocked and self._rsi_atr_pct_min_filter > 0 and h1_window is not None and len(h1_window) > 0:
-                atr_pct = self._get_atr_percentile(h1_window)
+            if not blocked and self._rsi_atr_pct_min_filter > 0 and h1_idx is not None and h1_idx >= 0:
+                atr_pct = self._get_atr_percentile_at(h1_idx)
                 if atr_pct < self._rsi_atr_pct_min_filter:
                     self.rsi_filtered_count += 1
                     blocked = True
@@ -1398,7 +1634,8 @@ class BacktestEngine:
         if filtered:
             self._pending_signals.append((filtered, 'M15'))
 
-    def _check_m15_custom_rsi(self, m15_window, h1_window, bar_time):
+    def _check_m15_custom_rsi(self, m15_window, h1_window, bar_time, *,
+                              h1_idx: Optional[int] = None):
         """Custom RSI threshold logic (replaces ParamExploreEngine)."""
         latest = m15_window.iloc[-1]
         close = float(latest['Close'])
@@ -1408,11 +1645,11 @@ class BacktestEngine:
         if pd.isna(rsi2) or pd.isna(sma50) or pd.isna(ema100):
             return
 
-        h1_adx_val = 0
-        if h1_window is not None and len(h1_window) > 0:
-            h1_adx_val = float(h1_window.iloc[-1].get('ADX', 0))
-            if pd.isna(h1_adx_val):
-                h1_adx_val = 0
+        h1_adx_val = 0.0
+        if h1_idx is not None and h1_idx >= 0:
+            v = self._h1_adx_arr[h1_idx]
+            if not np.isnan(v):
+                h1_adx_val = float(v)
 
         self.rsi_total_signals += 1
 
@@ -1441,17 +1678,24 @@ class BacktestEngine:
     # ── Signal processing ─────────────────────────────────────
 
     def _process_signals(self, signals: List[Dict], bar_time, source: str,
-                         entry_price_override: float = 0.0):
+                         entry_price_override: float = 0.0,
+                         *, h1_idx: Optional[int] = None):
         # Global entry gap check
         if self._min_entry_gap_hours > 0 and self._last_entry_time is not None:
             gap = (pd.Timestamp(bar_time) - self._last_entry_time).total_seconds() / 3600
             if gap < self._min_entry_gap_hours:
                 return
 
+        if h1_idx is None:
+            h1_idx = self._resolve_h1_idx(pd.Timestamp(bar_time))
+
         active_strategies = {p.strategy for p in self.positions}
         current_dir = self.positions[0].direction if self.positions else None
         slots = self._max_pos - len(self.positions)
         entered = False
+
+        # Cache the H1 ATR once for this bar (used 0-2x in SL/TP override + entry_atr)
+        bar_h1_atr = self._get_h1_atr_at(h1_idx)
 
         for sig in signals[:slots]:
             strategy = sig['strategy']
@@ -1461,15 +1705,11 @@ class BacktestEngine:
             tp = sig.get('tp', 0)
 
             # SL/TP ATR overrides
-            if self._sl_atr_mult > 0:
-                atr = self._get_h1_atr(self._get_h1_window(bar_time))
-                if atr > 0:
-                    sl = round(atr * self._sl_atr_mult, 2)
-                    sl = max(signals_mod.ATR_SL_MIN, min(signals_mod.ATR_SL_MAX, sl))
-            if self._tp_atr_mult > 0:
-                atr = self._get_h1_atr(self._get_h1_window(bar_time))
-                if atr > 0:
-                    tp = round(atr * self._tp_atr_mult, 2)
+            if self._sl_atr_mult > 0 and bar_h1_atr > 0:
+                sl = round(bar_h1_atr * self._sl_atr_mult, 2)
+                sl = max(signals_mod.ATR_SL_MIN, min(signals_mod.ATR_SL_MAX, sl))
+            if self._tp_atr_mult > 0 and bar_h1_atr > 0:
+                tp = round(bar_h1_atr * self._tp_atr_mult, 2)
 
             if tp <= 0:
                 tp = sl * 2
@@ -1538,16 +1778,15 @@ class BacktestEngine:
                 lots = max(self._min_lot, min(self._max_lot, lots))
 
             if self._atr_regime_lots:
-                h1_window = self._get_h1_window(bar_time)
-                if h1_window is not None and len(h1_window) > 0:
-                    atr_pct = self._get_atr_percentile(h1_window)
+                if h1_idx is not None and h1_idx >= 0:
+                    atr_pct = self._get_atr_percentile_at(h1_idx)
                     if atr_pct > 0.70:
                         lots = round(lots * 1.2, 2)
                     elif atr_pct < 0.30:
                         lots = round(lots * 0.7, 2)
                 lots = max(self._min_lot, min(self._max_lot, lots))
 
-            entry_atr = self._get_h1_atr(self._get_h1_window(bar_time))
+            entry_atr = bar_h1_atr
 
             pos = Position(
                 strategy=strategy, direction=direction,
@@ -1571,7 +1810,8 @@ class BacktestEngine:
 
     # ── Close position ────────────────────────────────────────
 
-    def _calc_dynamic_spread(self, bar_time, h1_atr: float = 0) -> float:
+    def _calc_dynamic_spread(self, bar_time, h1_atr: float = 0,
+                             *, h1_idx: Optional[int] = None) -> float:
         """Calculate spread cost based on the active model."""
         if self._spread_model == "fixed":
             return self._spread_cost
@@ -1579,8 +1819,9 @@ class BacktestEngine:
         if self._spread_model == "atr_scaled":
             if h1_atr <= 0:
                 return self._spread_base
-            h1_window = self._get_h1_window(bar_time)
-            atr_pct = self._get_atr_percentile(h1_window) if h1_window is not None else 0.5
+            if h1_idx is None:
+                h1_idx = self._resolve_h1_idx(pd.Timestamp(bar_time))
+            atr_pct = self._get_atr_percentile_at(h1_idx) if h1_idx is not None else 0.5
             scaled = self._spread_base * (1 + atr_pct)
             return min(scaled, self._spread_max)
 
@@ -1605,21 +1846,19 @@ class BacktestEngine:
 
         return self._spread_cost
 
-    def _close_position(self, pos: Position, exit_price: float, exit_time, reason: str):
+    def _close_position(self, pos: Position, exit_price: float, exit_time, reason: str,
+                        *, h1_idx: Optional[int] = None):
         if pos.direction == 'BUY':
             pnl_points = exit_price - pos.entry_price
         else:
             pnl_points = pos.entry_price - exit_price
         pnl = round(pnl_points * pos.lots * config.POINT_VALUE_PER_LOT, 2)
 
-        h1_atr = 0
-        h1w = self._get_h1_window(exit_time)
-        if h1w is not None and len(h1w) > 0:
-            atr_val = h1w.iloc[-1].get('ATR', 0)
-            if not pd.isna(atr_val):
-                h1_atr = float(atr_val)
+        if h1_idx is None:
+            h1_idx = self._resolve_h1_idx(pd.Timestamp(exit_time))
+        h1_atr = self._get_h1_atr_at(h1_idx)
 
-        spread = self._calc_dynamic_spread(exit_time, h1_atr)
+        spread = self._calc_dynamic_spread(exit_time, h1_atr, h1_idx=h1_idx)
         if spread > 0:
             pnl -= round(spread * pos.lots * config.POINT_VALUE_PER_LOT, 2)
 
@@ -1678,6 +1917,26 @@ class BacktestEngine:
                 self._h1_date_map[d].append(i)
 
     def _update_intraday_score(self, h1_window, bar_time):
+        # Fast path: P1 pre-computed score/regime arrays.  Equivalent output
+        # to the legacy iloc-heavy logic but ~12s faster on 6-month window.
+        if self._h1_score_arr is not None:
+            h1_time = pd.Timestamp(bar_time).floor('h')
+            max_idx = self.h1_lookup.get(h1_time, -1)
+            if max_idx < 0:
+                # fall back to <=  scan (rare, e.g. timestamp gaps)
+                h1_idx = self._resolve_h1_idx(pd.Timestamp(bar_time))
+                if h1_idx is None:
+                    return
+                max_idx = h1_idx
+            if max_idx >= len(self._h1_score_arr):
+                max_idx = len(self._h1_score_arr) - 1
+            self._current_score = float(self._h1_score_arr[max_idx])
+            self._current_regime = self._h1_regime_arr[max_idx]
+            self._cached_date = pd.Timestamp(bar_time).date()
+            self._cached_h1_count = max_idx
+            return
+
+        # Legacy path retained for engines without intraday_adaptive
         if h1_window is None or len(h1_window) < 2:
             return
         bar_date = pd.Timestamp(bar_time).date()
