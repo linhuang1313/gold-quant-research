@@ -1,0 +1,163 @@
+{
+  "mode": "sequential",
+  "chain_total_s": 473.92,
+  "chain_total_min": 7.9,
+  "n_variants": 3,
+  "n_folds_each": 6,
+  "per_variant": [
+    {
+      "label": "BASELINE",
+      "elapsed_s": 150.09,
+      "n_trades_total": 21144,
+      "pnl_total": 66099.7,
+      "sharpe_mean": 11.4772,
+      "fold_breakdown": [
+        {
+          "fold": "Fold1",
+          "elapsed": 27.8,
+          "n": 3670,
+          "sharpe": 12.427,
+          "pnl": 11073.75
+        },
+        {
+          "fold": "Fold2",
+          "elapsed": 23.8,
+          "n": 3869,
+          "sharpe": 12.244,
+          "pnl": 9451.97
+        },
+        {
+          "fold": "Fold3",
+          "elapsed": 21.1,
+          "n": 3697,
+          "sharpe": 11.64,
+          "pnl": 11055.74
+        },
+        {
+          "fold": "Fold4",
+          "elapsed": 28.9,
+          "n": 3830,
+          "sharpe": 11.414,
+          "pnl": 11476.32
+        },
+        {
+          "fold": "Fold5",
+          "elapsed": 29.9,
+          "n": 3691,
+          "sharpe": 11.352,
+          "pnl": 11433.17
+        },
+        {
+          "fold": "Fold6",
+          "elapsed": 18.4,
+          "n": 2387,
+          "sharpe": 9.786,
+          "pnl": 11608.75
+        }
+      ]
+    },
+    {
+      "label": "A1_SL3.0_TP6.0",
+      "elapsed_s": 163.75,
+      "n_trades_total": 21151,
+      "pnl_total": 71285.48,
+      "sharpe_mean": 11.3718,
+      "fold_breakdown": [
+        {
+          "fold": "Fold1",
+          "elapsed": 23.8,
+          "n": 3671,
+          "sharpe": 12.281,
+          "pnl": 11771.38
+        },
+        {
+          "fold": "Fold2",
+          "elapsed": 27.5,
+          "n": 3869,
+          "sharpe": 12.096,
+          "pnl": 9606.94
+        },
+        {
+          "fold": "Fold3",
+          "elapsed": 31.2,
+          "n": 3699,
+          "sharpe": 11.521,
+          "pnl": 12063.05
+        },
+        {
+          "fold": "Fold4",
+          "elapsed": 28.0,
+          "n": 3833,
+          "sharpe": 11.313,
+          "pnl": 12980.26
+        },
+        {
+          "fold": "Fold5",
+          "elapsed": 32.7,
+          "n": 3691,
+          "sharpe": 11.155,
+          "pnl": 12544.98
+        },
+        {
+          "fold": "Fold6",
+          "elapsed": 20.4,
+          "n": 2388,
+          "sharpe": 9.865,
+          "pnl": 12318.87
+        }
+      ]
+    },
+    {
+      "label": "A2_SL3.0_TP8.0",
+      "elapsed_s": 160.09,
+      "n_trades_total": 21151,
+      "pnl_total": 71530.45,
+      "sharpe_mean": 11.3854,
+      "fold_breakdown": [
+        {
+          "fold": "Fold1",
+          "elapsed": 26.2,
+          "n": 3671,
+          "sharpe": 12.301,
+          "pnl": 11795.14
+        },
+        {
+          "fold": "Fold2",
+          "elapsed": 31.0,
+          "n": 3869,
+          "sharpe": 12.11,
+          "pnl": 9615.67
+        },
+        {
+          "fold": "Fold3",
+          "elapsed": 26.5,
+          "n": 3699,
+          "sharpe": 11.551,
+          "pnl": 12108.03
+        },
+        {
+          "fold": "Fold4",
+          "elapsed": 23.8,
+          "n": 3833,
+          "sharpe": 11.319,
+          "pnl": 12984.83
+        },
+        {
+          "fold": "Fold5",
+          "elapsed": 30.7,
+          "n": 3691,
+          "sharpe": 11.125,
+          "pnl": 12603.74
+        },
+        {
+          "fold": "Fold6",
+          "elapsed": 21.7,
+          "n": 2388,
+          "sharpe": 9.906,
+          "pnl": 12423.04
+        }
+      ]
+    }
+  ],
+  "timestamp": "2026-04-27T01:49:47.634321"
+}
