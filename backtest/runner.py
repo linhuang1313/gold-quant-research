@@ -24,18 +24,24 @@ from backtest.stats import calc_stats
 # Default data paths
 # ═══════════════════════════════════════════════════════════════
 
-_M15_NEW = Path("data/download/xauusd-m15-bid-2015-01-01-2026-04-10.csv")
-_M15_OLD = Path("data/download/xauusd-m15-bid-2015-01-01-2026-03-25.csv")
-M15_CSV_PATH = _M15_NEW if _M15_NEW.exists() else _M15_OLD
+_M15_CANDIDATES = [
+    Path("data/download/xauusd-m15-bid-2015-01-01-2026-04-27.csv"),
+    Path("data/download/xauusd-m15-bid-2015-01-01-2026-04-10.csv"),
+    Path("data/download/xauusd-m15-bid-2015-01-01-2026-03-25.csv"),
+]
+M15_CSV_PATH = next((p for p in _M15_CANDIDATES if p.exists()), _M15_CANDIDATES[0])
 
-_H1_NEW = Path("data/download/xauusd-h1-bid-2015-01-01-2026-04-10.csv")
-_H1_OLD = Path("data/download/xauusd-h1-bid-2015-01-01-2026-03-25.csv")
-H1_CSV_PATH = _H1_NEW if _H1_NEW.exists() else _H1_OLD
+_H1_CANDIDATES = [
+    Path("data/download/xauusd-h1-bid-2015-01-01-2026-04-27.csv"),
+    Path("data/download/xauusd-h1-bid-2015-01-01-2026-04-10.csv"),
+    Path("data/download/xauusd-h1-bid-2015-01-01-2026-03-25.csv"),
+]
+H1_CSV_PATH = next((p for p in _H1_CANDIDATES if p.exists()), _H1_CANDIDATES[0])
 
-M15_ASK_PATH = Path("data/download/xauusd-m15-ask-2015-01-01-2026-04-10.csv")
-H1_ASK_PATH = Path("data/download/xauusd-h1-ask-2015-01-01-2026-04-10.csv")
-M15_SPREAD_PATH = Path("data/download/xauusd-m15-spread-2015-01-01-2026-04-10.csv")
-H1_SPREAD_PATH = Path("data/download/xauusd-h1-spread-2015-01-01-2026-04-10.csv")
+M15_ASK_PATH = Path("data/download/xauusd-m15-ask-2015-01-01-2026-04-27.csv")
+H1_ASK_PATH = Path("data/download/xauusd-h1-ask-2015-01-01-2026-04-27.csv")
+M15_SPREAD_PATH = Path("data/download/xauusd-m15-spread-2015-01-01-2026-04-27.csv")
+H1_SPREAD_PATH = Path("data/download/xauusd-h1-spread-2015-01-01-2026-04-27.csv")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -450,6 +456,7 @@ def run_variant(data: DataBundle, label: str, *, verbose: bool = True, **engine_
     stats['equity_filter_skip'] = getattr(engine, 'equity_filter_skip_count', 0)
     stats['final_capital'] = getattr(engine, '_current_capital', 0)
     stats['equity_peak'] = getattr(engine, '_equity_peak', 0)
+    stats['skipped_no_signal'] = getattr(engine, 'skipped_no_signal', 0)
     stats['elapsed_s'] = round(elapsed, 1)
     stats['_trades'] = trades
     stats['_equity_curve'] = engine.equity_curve
@@ -639,11 +646,40 @@ V3_REGIME = {
     'high': {'trail_act': 0.6, 'trail_dist': 0.20},
 }
 
-# Matches live config.py + exit_logic.py as of 2026-04-13 (L5.1 deployment).
-# L5.1 changes vs L5:
-#   - sl_atr_mult: 4.5→3.5 (R6-A5 K-Fold 6/6, Sharpe +0.17)
-#   - max_positions: 2→1 (R6-A4 K-Fold 6/6, Sharpe +0.43, MaxDD -$72)
+# Matches live config.py + exit_logic.py as of 2026-04-28 (L8_BASE+Cap80).
+# History: L5.1 (04-13) → L6 (04-18) → L7 (04-22) → L8 (04-26) → L8_BASE+Cap80 (04-28)
+# Key L8 changes vs L5.1:
+#   - ADX: 18→14 (R39 K-Fold 6/6)
+#   - Regime trail: UT3g_micro (R39, Sharpe 10.86→12.02)
+#   - TATrail: OFF (R42, was net negative)
+#   - MaxHold: 5h unchanged (was 5h in L5.1, 2h in L7, back to 5h in L8_BASE)
+# Features NOT in engine kwargs (applied post-hoc in experiments):
+#   - KCBW5: use filter_kcbw5() — currently OFF in live
+#   - MaxLoss Cap $80: use apply_max_loss_cap(trades, 80) — "disaster insurance"
+#   - Fixed lot 0.03: live uses fixed lots, engine uses ATR-based sizing
 LIVE_PARITY_KWARGS = {
+    "trailing_activate_atr": 0.14,
+    "trailing_distance_atr": 0.025,
+    "sl_atr_mult": 3.5,
+    "tp_atr_mult": 8.0,
+    "keltner_adx_threshold": 14,
+    "regime_config": {
+        'low':    {'trail_act': 0.22, 'trail_dist': 0.04},
+        'normal': {'trail_act': 0.14, 'trail_dist': 0.025},
+        'high':   {'trail_act': 0.06, 'trail_dist': 0.008},
+    },
+    "intraday_adaptive": True,
+    "choppy_threshold": 0.50,
+    "time_decay_tp": False,
+    "rsi_adx_filter": 40,
+    "keltner_max_hold_m15": 20,
+    "max_positions": 1,
+    "live_atr_percentile": True,
+}
+
+# Legacy L5.1 preset — kept for historical comparison only.
+# DO NOT use for new experiments; use LIVE_PARITY_KWARGS instead.
+L51_PARITY_KWARGS = {
     "trailing_activate_atr": 0.28,
     "trailing_distance_atr": 0.06,
     "sl_atr_mult": 3.5,
@@ -675,6 +711,150 @@ TRUE_BASELINE_KWARGS = {
 # ═══════════════════════════════════════════════════════════════
 # JSON serialization helper
 # ═══════════════════════════════════════════════════════════════
+
+def screen_then_validate(
+    data: DataBundle,
+    h1_df: pd.DataFrame,
+    signal_func,
+    param_grid: List[Dict],
+    engine_kwargs_func,
+    *,
+    bt_defaults: Optional[Dict] = None,
+    filter_mode: str = 'eliminate',
+    min_screen_sharpe: float = 0.0,
+    top_k: int = 3,
+    rank_by: str = 'sharpe',
+    kfold_validate: bool = True,
+    kfold_min_sharpe: float = 1.0,
+    label_prefix: str = "",
+    verbose: bool = True,
+) -> Dict:
+    """Two-tier screening: fast eliminate bad combos, then full engine validation.
+
+    Tier 1 uses fast_backtest_signals (NumPy loop on H1) to eliminate clearly
+    non-viable combos (Sharpe < threshold). This avoids accidentally discarding
+    good strategies that the simplified H1 model underestimates.
+
+    Tier 2 runs ALL survivors through the full BacktestEngine. K-Fold is only
+    done on candidates exceeding kfold_min_sharpe in the full engine run.
+
+    Args:
+        data: DataBundle for full engine runs
+        h1_df: H1 DataFrame with indicators for fast screening
+        signal_func: callable(df, **sig_params) -> (signals, atr)
+        param_grid: list of dicts with 'sig_params' and optionally 'bt_params', 'label'
+        engine_kwargs_func: callable(sig_params, bt_params) -> dict of BacktestEngine kwargs
+            Translates screened params into full engine config.
+        bt_defaults: default backtest params for tier 1
+        filter_mode: 'eliminate' = keep all with sharpe >= min_screen_sharpe;
+                     'top_k' = keep only top_k (legacy, may miss good strategies)
+        min_screen_sharpe: elimination threshold for tier 1 (default 0.0)
+        top_k: number of candidates in top_k mode (ignored in eliminate mode)
+        rank_by: metric for tier 1 ranking
+        kfold_validate: run K-Fold on qualifying candidates in tier 2
+        kfold_min_sharpe: only K-Fold candidates with full-engine sharpe >= this
+        label_prefix: prefix for labels
+        verbose: print progress
+
+    Returns:
+        Dict with 'screen_results', 'validated', 'kfold', and 'timing'.
+    """
+    from backtest.fast_screen import screen_grid
+    import time as _time
+
+    t0 = _time.time()
+
+    if filter_mode == 'eliminate':
+        if verbose:
+            print(f"\n  === Two-Tier Screening (eliminate mode): "
+                  f"{len(param_grid)} combos, min_sharpe={min_screen_sharpe} ===")
+            print(f"  Tier 1: Fast screening on H1...", flush=True)
+
+        survivors = screen_grid(
+            h1_df, signal_func, param_grid,
+            bt_defaults=bt_defaults, min_sharpe=min_screen_sharpe,
+            rank_by=rank_by, label_prefix=label_prefix, verbose=verbose,
+        )
+    else:
+        if verbose:
+            print(f"\n  === Two-Tier Screening (top_k mode): "
+                  f"{len(param_grid)} combos -> top {top_k} ===")
+            print(f"  Tier 1: Fast screening on H1...", flush=True)
+
+        survivors = screen_grid(
+            h1_df, signal_func, param_grid,
+            bt_defaults=bt_defaults, top_k=top_k,
+            rank_by=rank_by, label_prefix=label_prefix, verbose=verbose,
+        )
+
+    tier1_time = _time.time() - t0
+
+    if verbose:
+        print(f"\n  Tier 2: Full engine validation on {len(survivors)} candidates...",
+              flush=True)
+
+    validated = []
+    kfold_results = []
+    for idx, r in enumerate(survivors):
+        engine_kw = engine_kwargs_func(r['sig_params'], r['bt_params'])
+        label = f"V_{r['label']}"
+
+        stats = run_variant(data, label, verbose=verbose, **engine_kw)
+        engine_sharpe = stats.get('sharpe', 0)
+        validated.append({
+            'label': label,
+            'screen_rank': r['rank'],
+            'screen_sharpe': r['stats']['sharpe'],
+            'engine_sharpe': engine_sharpe,
+            'engine_stats': {k: v for k, v in stats.items() if not k.startswith('_')},
+            'sig_params': r['sig_params'],
+            'bt_params': r['bt_params'],
+        })
+
+        if kfold_validate and engine_sharpe >= kfold_min_sharpe:
+            kf = run_kfold(data, engine_kw, n_folds=6, label_prefix=f"KF_{r['label']}_")
+            sharpes = [f['sharpe'] for f in kf]
+            kfold_results.append({
+                'label': label,
+                'sharpes': [round(s, 2) for s in sharpes],
+                'mean_sharpe': round(np.mean(sharpes), 2) if sharpes else 0,
+                'min_sharpe': round(min(sharpes), 2) if sharpes else 0,
+                'pass_count': sum(1 for s in sharpes if s > 0),
+                'n_folds': len(sharpes),
+            })
+            if verbose:
+                kfr = kfold_results[-1]
+                print(f"    K-Fold: {kfr['pass_count']}/{kfr['n_folds']} pass, "
+                      f"mean={kfr['mean_sharpe']:.2f}, min={kfr['min_sharpe']:.2f}")
+
+        if verbose and (idx + 1) % 10 == 0:
+            elapsed = _time.time() - t0
+            print(f"    Progress: {idx+1}/{len(survivors)} validated ({elapsed:.0f}s)",
+                  flush=True)
+
+    total_time = _time.time() - t0
+    if verbose:
+        n_kfold_pass = sum(1 for k in kfold_results if k['pass_count'] >= 5)
+        print(f"\n  === Done: {tier1_time:.1f}s tier1 + "
+              f"{total_time - tier1_time:.1f}s tier2 = {total_time:.1f}s total ===")
+        print(f"  {len(param_grid)} screened -> {len(survivors)} validated -> "
+              f"{len(kfold_results)} K-Fold tested -> {n_kfold_pass} passed 5/6")
+
+    return {
+        'screen_survivors': [{k: v for k, v in r.items()} for r in survivors],
+        'validated': validated,
+        'kfold': kfold_results if kfold_validate else [],
+        'timing': {
+            'tier1_s': round(tier1_time, 1),
+            'tier2_s': round(total_time - tier1_time, 1),
+            'total_s': round(total_time, 1),
+            'n_screened': len(param_grid),
+            'n_survived': len(survivors),
+            'n_validated': len(validated),
+            'n_kfold_tested': len(kfold_results),
+        },
+    }
+
 
 def sanitize_for_json(results: List[Dict]) -> List[Dict]:
     """Convert numpy types and drop non-serializable fields for JSON output."""

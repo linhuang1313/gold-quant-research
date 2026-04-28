@@ -73,6 +73,17 @@
 - **不再投入时间做 Keltner 参数扫描/微调**, 除非有结构性新信息
 - **⚠️ 例外: MaxHold 优化有效** (R25/R27): MH 20→8 Sharpe +0.7~1.0, 这不是参数微调而是结构性改善 (减少 Timeout 最大亏损源)
 
+### R45 新信号源探索 — 放弃项 (2026-04-27)
+- **S2 BB Squeeze-to-Expansion**: 11年仅3笔交易, K-Fold 1/6, 严重过拟合无统计意义
+- **S6 Range Contraction Filter on L8**: 过滤掉83%交易, Sharpe从11.34全面下降至6.6~7.9, 无正向价值
+- **S1 Donchian Channel Breakout**: K-Fold 6/6 Sharpe 7.83 但**与L8日收益相关性0.445**, 同为趋势突破, 组合无分散化价值; 不作为独立策略部署
+- **S5 Z-Score Mean Reversion (激进配置)**: p=100/z=3.0/adx<20 虽 Sharpe 5.72 但仅198笔; 修复后(p=150/z=3.5/adx<20)虽6/6但仅40笔, 统计功效不足, **标记观察不部署**
+
+### R45 新信号源探索 — 正面结论 (2026-04-27)
+- **S4 Chandelier Exit Flip**: K-Fold 6/6, mean=6.35, min=6.02; **与L8相关性-0.021(零)**; 组合MaxDD降23%; 12组参数全>10.2组合Sharpe; 推荐部署
+- **S3 Dual Thrust**: K-Fold 6/6, mean=5.88, min=4.27; L8相关性0.277(中低); 三策略组合min Sharpe 10.62 > L8单独10.29; 推荐观察
+- **Spread抗性**: 全部4个候选策略在$1.50 spread下仍盈利, S1 Donchian最抗spread(衰减21%), S4/S3衰减28%
+
 ### R25-R27 已验证的正面结论 (2026-04-22)
 - **D1/H4 Keltner 是独立 alpha**: EMA20/M2.0/ADX18, K-Fold 6/6, 与 L7 相关性 0.17-0.22
 - **D1/H4 参数极其鲁棒**: R27 cliff test 125 组合, EMA15-25/Mult1.5-2.5/ADX15-25 全区域 Sharpe 3.7-6.6, 无悬崖

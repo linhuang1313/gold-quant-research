@@ -268,6 +268,10 @@ class BacktestEngine:
         profit_reinvest_pct: float = 0.0,  # fraction of profits to reinvest into capital (0-1)
         equity_curve_filter: bool = False,  # only trade when equity > its own MA
         equity_ma_period: int = 50,         # MA period for equity curve filter (in trades)
+        # Performance: when no positions and not H1 boundary, skip the bar entirely.
+        # Gives ~1.6x speedup by avoiding H1 window lookup + M15 window slicing.
+        # Trade-off: M15-only signals (RSI) on non-H1 bars are not checked when flat.
+        skip_non_h1_bars: bool = True,
         # Label
         label: str = "",
     ):
@@ -489,6 +493,7 @@ class BacktestEngine:
         self._profit_reinvest_pct = profit_reinvest_pct
         self._equity_curve_filter = equity_curve_filter
         self._equity_ma_period = equity_ma_period
+        self._skip_non_h1_bars = skip_non_h1_bars
         self._consecutive_wins = 0
         self._consecutive_losses = 0
         self._equity_peak = self._initial_capital
@@ -760,25 +765,45 @@ class BacktestEngine:
         print(f"  M15 bars: {total_bars}, H1 bars: {len(self.h1_df)}")
 
         m15_index = self.m15_df.index
+        m15_close_arr = self.m15_df['Close'].values.astype(np.float64)
+        m15_open_arr = self.m15_df['Open'].values.astype(np.float64)
+        m15_high_arr = self.m15_df['High'].values.astype(np.float64)
+        m15_low_arr = self.m15_df['Low'].values.astype(np.float64)
+        m15_is_flat_arr = self.m15_df['is_flat'].values if 'is_flat' in self.m15_df.columns else np.zeros(total_bars, dtype=bool)
+        m15_minute_arr = m15_index.minute
+
+        m15_dates = m15_index.date
+
+        base_capital = config.CAPITAL
+        self.skipped_no_signal = 0
         last_pct = 0
+
         for i in range(lookback, total_bars):
             pct = int((i - lookback) / (total_bars - lookback) * 100) // 10 * 10
             if pct > last_pct:
                 print(f"    {pct}%...", end='', flush=True)
                 last_pct = pct
 
-            bar = self.m15_df.iloc[i]
             bar_time = m15_index[i]
-            bar_date = bar_time.date()
+            bar_date = m15_dates[i]
 
             if bar_date != self.current_date:
                 self.current_date = bar_date
                 self.daily_loss_count = 0
 
-            is_flat = bool(bar.get('is_flat', False))
-            if is_flat:
-                unrealized = self._calc_unrealized(float(bar['Close']))
-                self.equity_curve.append(config.CAPITAL + self._realized_pnl + unrealized)
+            if m15_is_flat_arr[i]:
+                unrealized = self._calc_unrealized(m15_close_arr[i])
+                self.equity_curve.append(base_capital + self._realized_pnl + unrealized)
+                continue
+
+            has_positions = len(self.positions) > 0
+            has_pending = len(self._pending_signals) > 0
+            is_h1_boundary = (m15_minute_arr[i] == 0)
+
+            if (self._skip_non_h1_bars
+                    and not has_positions and not has_pending and not is_h1_boundary):
+                self.equity_curve.append(base_capital + self._realized_pnl)
+                self.skipped_no_signal += 1
                 continue
 
             h1_idx, h1_window = self._get_h1_window_with_idx(bar_time)
@@ -786,27 +811,27 @@ class BacktestEngine:
             need_entries = (self.daily_loss_count < config.DAILY_MAX_LOSSES
                            and len(self.positions) < max_pos)
 
-            if need_entries or self.positions or self._pending_signals:
+            if need_entries or has_positions or has_pending:
                 m15_start_idx = max(0, i - self.M15_WINDOW + 1)
                 m15_window = self.m15_df.iloc[m15_start_idx:i + 1]
             else:
                 m15_window = None
 
-            if self._pending_signals:
-                bar_open = float(bar['Open'])
+            if has_pending:
+                bar_open = m15_open_arr[i]
                 for pending_sigs, pending_source in self._pending_signals:
                     self._process_signals(pending_sigs, bar_time, pending_source,
                                           entry_price_override=bar_open,
                                           h1_idx=h1_idx)
                 self._pending_signals.clear()
 
-            if self.positions and m15_window is not None:
-                self._check_exits(m15_window, h1_window, bar, bar_time, h1_idx=h1_idx)
+            if has_positions and m15_window is not None:
+                self._check_exits(m15_window, h1_window,
+                                  self.m15_df.iloc[i], bar_time, h1_idx=h1_idx)
 
             if need_entries and m15_window is not None:
                 h1_idx_closed = h1_idx - 1 if h1_idx is not None and h1_idx > 0 else None
                 h1_window_closed = self._h1_window_from_idx(h1_idx_closed) if h1_idx_closed is not None else None
-                is_h1_boundary = (bar_time.minute == 0)
 
                 if is_h1_boundary and h1_window_closed is not None and len(h1_window_closed) >= 50:
                     self._check_h1_entries(h1_window_closed, bar_time, h1_idx=h1_idx_closed)
@@ -814,16 +839,16 @@ class BacktestEngine:
                 if len(m15_window) >= 105:
                     self._check_m15_entries(m15_window, h1_window_closed, bar_time, h1_idx=h1_idx_closed)
 
-            unrealized = self._calc_unrealized(float(bar['Close']))
-            self.equity_curve.append(config.CAPITAL + self._realized_pnl + unrealized)
+            unrealized = self._calc_unrealized(m15_close_arr[i])
+            self.equity_curve.append(base_capital + self._realized_pnl + unrealized)
 
         if self.positions:
-            last_bar = self.m15_df.iloc[-1]
-            last_time = self.m15_df.index[-1]
+            last_close = m15_close_arr[-1]
+            last_time = m15_index[-1]
             for pos in list(self.positions):
-                self._close_position(pos, float(last_bar['Close']), last_time, "backtest_end")
+                self._close_position(pos, last_close, last_time, "backtest_end")
 
-        print(f" done!")
+        print(f" done! (skipped {self.skipped_no_signal} no-signal bars)")
         return self.trades
 
     # ── Exits ─────────────────────────────────────────────────

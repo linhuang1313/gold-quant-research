@@ -156,7 +156,58 @@ def prepare_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df['pa_bear_count'] = (df['pinbar_bear'] + df['top_fractal']
                            + df['inside_bar_bear'] + df['engulf_bear'])
 
+    # ── BB Bandwidth (for squeeze strength) ──
+    _bb_mid = df['Close'].rolling(20).mean()
+    df['BB_bandwidth'] = (df['BB_upper'] - df['BB_lower']) / _bb_mid.replace(0, np.nan)
+
     return df
+
+
+# ═══════════════════════════════════════════════════════════════
+# R45 新信号源指标
+# ═══════════════════════════════════════════════════════════════
+
+def calc_donchian(df: pd.DataFrame, period: int = 20) -> pd.DataFrame:
+    """Donchian Channel: N-period highest high / lowest low."""
+    out = pd.DataFrame(index=df.index)
+    out['DC_upper'] = df['High'].rolling(period).max()
+    out['DC_lower'] = df['Low'].rolling(period).min()
+    out['DC_mid'] = (out['DC_upper'] + out['DC_lower']) / 2
+    return out
+
+
+def calc_chandelier(df: pd.DataFrame, period: int = 22, mult: float = 3.0) -> pd.DataFrame:
+    """Chandelier Exit: trailing stop from N-period extreme."""
+    atr = (df['High'] - df['Low']).rolling(14).mean()
+    hh = df['High'].rolling(period).max()
+    ll = df['Low'].rolling(period).min()
+    out = pd.DataFrame(index=df.index)
+    out['Chand_long'] = hh - mult * atr
+    out['Chand_short'] = ll + mult * atr
+    return out
+
+
+def calc_zscore(series: pd.Series, period: int = 50) -> pd.Series:
+    """Z-Score of a price series relative to its N-period SMA."""
+    sma = series.rolling(period).mean()
+    std = series.rolling(period).std()
+    return (series - sma) / std.replace(0, np.nan)
+
+
+def calc_dual_thrust_range(df: pd.DataFrame, n_bars: int = 6) -> pd.Series:
+    """Dual Thrust range: max(HH-LC, HC-LL) over N bars."""
+    hh = df['High'].rolling(n_bars).max()
+    lc = df['Close'].rolling(n_bars).min()
+    hc = df['Close'].rolling(n_bars).max()
+    ll = df['Low'].rolling(n_bars).min()
+    return pd.concat([hh - lc, hc - ll], axis=1).max(axis=1)
+
+
+def calc_range_contraction(df: pd.DataFrame, short_n: int = 7, long_n: int = 28) -> pd.Series:
+    """Range contraction ratio: short ATR / long ATR. Values < 1 = contraction."""
+    atr_short = (df['High'] - df['Low']).rolling(short_n).mean()
+    atr_long = (df['High'] - df['Low']).rolling(long_n).mean()
+    return atr_short / atr_long.replace(0, np.nan)
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -7,7 +7,12 @@
 
 ## 回测引擎 Preset
 
-### LIVE_PARITY_KWARGS (标准 preset，所有新实验必须使用)
+### LIVE_PARITY_KWARGS (2026-04-29 更新，对齐 L8_BASE+Cap80)
+
+✅ 已更新至 L8_BASE+Cap80 参数: ADX=14, UT3g_micro regime trail (0.22/0.14/0.06), TATrail OFF, MH=20。
+旧 L5.1 参数保留为 `L51_PARITY_KWARGS` 供历史对比用。
+注意: KCBW5 和 MaxLoss Cap $80 不在 engine kwargs 中，需用 `filter_kcbw5()` 和 `apply_max_loss_cap()` 后处理。
+回测 L8_BASE 时请使用 `run_l7_l8_compare.py` 中的 `L8_BASE` dict 定义。
 
 | 参数 | 值 | 来源 |
 |------|-----|------|
@@ -40,23 +45,73 @@
 
 ## 策略版本定义
 
-### 当前实盘: L6 (2026-04-18 部署)
+### 当前实盘: L8_BASE + Cap80 (2026-04-28 部署)
+L8_BASE = LIVE_PARITY 基础上修改 ADX/Trail/TATrail/MH
+
+**EA 文件**: `deploy/L8_BASE_EA.mq4` (MagicNumber=20250427)
+
+| 参数 | 值 | 与 L7 差异 |
+|------|-----|-----------|
+| 信号 | H1 Keltner 通道突破 (EMA25, Mult 1.2) | 不变 |
+| ADX 过滤 | >14 | L7 为 18，**L8 更宽松** |
+| EMA100 趋势过滤 | 价格必须在 EMA100 同侧 | 不变 |
+| Choppy 过滤 | trend_score ≥ 0.50 | 不变 |
+| 入场间隔 | 1 小时 | 不变 |
+| 止损 | 3.5 × ATR | 不变 |
+| 止盈 | 8.0 × ATR | 不变 |
+| Trailing (低波动 ATR<25%) | 激活 0.22xATR, 距离 0.04xATR | L7 为 0.30/0.06 |
+| Trailing (正常波动) | 激活 0.14xATR, 距离 0.025xATR | L7 为 0.28/0.06，**大幅收紧** |
+| Trailing (高波动 ATR>75%) | 激活 0.06xATR, 距离 0.008xATR | L7 为 0.12/0.02，**大幅收紧** |
+| TATrail | **OFF** | L7 为 ON (s2/d0.75/f0.003) |
+| MaxHold | 5 小时 (20 M15 bars) | L7 为 8 bars (2小时) |
+| MaxLoss Cap | **$80** (灾难险) | |
+| KCBW | **OFF** | |
+| 手数 | 固定 0.03 | |
+| 最大同时持仓 | 1 笔 | 不变 |
+| live_atr_percentile | True (rolling-50) | 不变 |
+
+**L8_BASE vs L7 核心差异总结:**
+1. ADX 门槛降低 (18→14): 更多入场信号
+2. Regime Trail 全面收紧: 正常波动 0.28/0.06→0.14/0.025，高波动 0.12/0.02→0.06/0.008
+3. TATrail 关闭: 不使用时间衰减追踪止盈
+4. MaxHold 恢复 20 bars: 给趋势更多空间 (L7 曾缩短到 8)
+
+**L8_BASE 验证数据 (R41):**
+- K-Fold 6/6 PASS (CorrSh Mean=6.27, Min=1.14, spread=$0.50)
+- 对比: L7 vs L8_BASE vs L8_HYBRID vs L8c_R39 全面对比
+
+**备注:** EA 源码默认值已更新为 `KCBW_Enabled=false, MaxLoss_USD=80`，与实盘一致。
+
+### 历史版本: L7
+L7 = L6 + TATrail(s2/d0.75/f0.003) + min_entry_gap_hours=1.0
+
+| 参数 | 说明 | 值 |
+|------|------|-----|
+| time_adaptive_trail | 启用时间自适应追踪止盈 | True |
+| time_adaptive_trail_start | 持仓超过N根bar后开始收紧 | 2 |
+| time_adaptive_trail_decay | 每bar衰减系数 | 0.75 |
+| time_adaptive_trail_floor | 最小trail距离(ATR倍数) | 0.003 |
+| min_entry_gap_hours | 两次入场最小间隔 | 1.0 |
+| keltner_max_hold_m15 | 最大持仓时间 | 8 (2小时) |
+
+**L7 验证数据:**
+- 全样本 $0.30: Sharpe 7.18→7.46 (+0.28), PnL $45,075→$46,468
+- 全样本 $0.50: Sharpe 4.88→5.18 (+0.30)
+- 逐年: 11/11年 L7 均优于 L6，无一例外
+- K-Fold $0.30: 6/6 PASS (delta +0.12~+0.48)
+- K-Fold $0.50: 6/6 PASS (delta +0.10~+0.60)
+- Walk-Forward: 12/12年全盈利 (含2026)
+
+### 历史版本: L6
 L6 = L5.1 + UltraTight2 regime trail
 
 | 参数 | 值 |
 |------|-----|
-| 止损 | 3.5 x ATR |
-| 止盈 | 8.0 x ATR |
-| 最大持仓时间 | 5 小时 (20 x M15) |
-| 最大同时持仓 | 1 笔 |
-| Trailing (低波动 ATR<30%) | 激活 0.30xATR, 距离 0.06xATR |
-| Trailing (正常波动) | 激活 0.20xATR, 距离 0.04xATR |
-| Trailing (高波动 ATR>70%) | 激活 0.08xATR, 距离 0.01xATR |
-| IntradayTrendMeter | Choppy < 0.50 禁止开仓 |
-| 时间衰减止盈 (TDTP) | OFF |
-| 冷却期 | 30 分钟 |
+| Trailing (低波动) | 0.30/0.06 |
+| Trailing (正常波动) | 0.20/0.04 |
+| Trailing (高波动) | 0.08/0.01 |
+| ADX 过滤 | 18 |
 | RSI ADX 过滤 | 40 |
-| live_atr_percentile | True (rolling-50) |
 
 **L6 验证数据:**
 - Sharpe: 6.17→7.18 (+1.01), K-Fold 6/6 (双点差), WF 11/11
@@ -71,39 +126,6 @@ L5.1 = L5 + SL 3.5x + MaxPos=1
 | regime trail normal | 0.28/0.06 |
 | regime trail high | 0.12/0.02 |
 | trail fallback | 0.28/0.06 |
-
-### Paper Trade 中: L7
-L7 = L6 + TATrail(s2/d0.75/f0.003) + min_entry_gap_hours=1.0
-
-| 参数 | 说明 | 值 |
-|------|------|-----|
-| time_adaptive_trail | 启用时间自适应追踪止盈 | True |
-| time_adaptive_trail_start | 持仓超过N根bar后开始收紧 | 2 |
-| time_adaptive_trail_decay | 每bar衰减系数 | 0.75 |
-| time_adaptive_trail_floor | 最小trail距离(ATR倍数) | 0.003 |
-| min_entry_gap_hours | 两次入场最小间隔 | 1.0 |
-
-**L7 验证数据:**
-- 全样本 $0.30: Sharpe 7.18→7.46 (+0.28), PnL $45,075→$46,468
-- 全样本 $0.50: Sharpe 4.88→5.18 (+0.30)
-- 逐年: 11/11年 L7 均优于 L6，无一例外
-- K-Fold $0.30: 6/6 PASS (delta +0.12~+0.48)
-- K-Fold $0.50: 6/6 PASS (delta +0.10~+0.60)
-- Walk-Forward: 12/12年全盈利 (含2026)
-
-### 待部署: L7(MH=8)
-L7(MH=8) = L7 + keltner_max_hold_m15=8 (从20缩短到8, 即2小时)
-
-| 参数 | 说明 | 值 |
-|------|------|-----|
-| (继承L7全部参数) | | |
-| keltner_max_hold_m15 | 最大持仓时间(M15 bar数) | **8** (原20) |
-
-**L7(MH=8) 验证数据:**
-- R25 截断数据: Sharpe 10.14, K-Fold 5/5
-- R26 完整数据: Sharpe 9.61
-- R28 完整数据 K-Fold: 运行中
-- 逻辑: Timeout 是最大亏损源 (-$24K), MH=8 大幅减少 Timeout 触发, Sharpe +0.7~1.0
 
 ### 待部署: D1/H4 Keltner (独立策略)
 
@@ -151,6 +173,26 @@ L7(MH=8) = L7 + keltner_max_hold_m15=8 (从20缩短到8, 即2小时)
 
 ## 回测引擎能力
 
+### 性能优化 (2026-04-28)
+
+**skip_non_h1_bars=True (默认开启)**
+- 跳过"无持仓 + 无挂起信号 + 非H1边界"的 M15 bar
+- 加速 1.6x (342s → 213s，267K bars 全样本)
+- 跳过了 ~46% 的 bars (M15 RSI 信号不再在非 H1 边界 bar 触发)
+- 设 `skip_non_h1_bars=False` 回退完整行为
+
+**两层快筛架构 (backtest/fast_screen.py)**
+- `fast_backtest_signals()`: 纯 NumPy H1 单时间框架回测，~2-3s/次
+- `screen_grid()`: 批量扫描参数网格，支持淘汰器模式 (`min_sharpe=0`)
+- `screen_then_validate()`: 自动化 "快筛淘汰 → 完整验证 → K-Fold" 全流程
+- 快筛定位: **淘汰器**（排除 Sharpe<0），不做最终排名选择
+
+**实验 SOP 流程**
+1. Phase 1: `screen_grid(min_sharpe=0)` 快速淘汰明显差的组合 (~1000 组合/小时)
+2. Phase 2: 全部存活候选用完整引擎验证 + K-Fold (只对 Sharpe>1 做 K-Fold)
+3. Phase 3: Top 候选做压力确认 (Spread/Crisis/MonteCarlo)
+- 模板脚本: `experiments/_template_experiment.py`
+
 ### 核心引擎参数 (engine.py / runner.py)
 - KC 参数: `kc_ema_override`, `kc_mult_override`
 - 出场: `sl_atr_mult`, `tp_atr_mult`, `keltner_max_hold_m15`, `time_decay_tp`
@@ -161,6 +203,7 @@ L7(MH=8) = L7 + keltner_max_hold_m15=8 (从20缩短到8, 即2小时)
 - MA类型: `kc_ma_type` (ema/hma/kama) (R13新增, 已否决)
 - Spread: `spread_model`, `spread_series`
 - 验证: `purge_embargo_bars` (R13新增)
+- 性能: `skip_non_h1_bars` (默认 True, 1.6x 加速)
 
 ### 指标 (indicators.py)
 - Keltner Channel (EMA/HMA/KAMA + ATR)
@@ -218,9 +261,14 @@ ATR(22.9%) > EMA100_dist(16.8%) > KC_pos(14.5%) > RSI14(11.5%) > KC_bw(8.8%)
 
 | 服务器 | 连接 | 用途 |
 |--------|------|------|
-| Server C | `ssh -p 16005 root@connect.westc.seetacloud.com` | R15 TATrail |
-| Server D | `ssh -p 35258 root@connect.westd.seetacloud.com` | R13 Alpha |
-| 密码 (C/D) | `r1zlTZQUb+E4` | 两台相同 |
-| **Server BJB1** | `ssh -p 45411 root@connect.bjb1.seetacloud.com` | **R25-R28 (当前)** |
-| 密码 (BJB1) | `5zQ8khQzttDN` | |
+| **Server Westd (当前)** | `ssh -p 41109 root@connect.westd.seetacloud.com` | **R47+ (当前活跃)** |
+| 密码 (Westd) | `3sCdENtzYfse` | |
+| Server C | `ssh -p 16005 root@connect.westc.seetacloud.com` | R15 TATrail (可能已过期) |
+| Server BJB1 | `ssh -p 45411 root@connect.bjb1.seetacloud.com` | R25-R28 (可能已过期) |
 | 项目路径 | `/root/gold-quant-research` | 服务器上的工作目录 |
+
+**已部署到服务器的优化引擎** (2026-04-28):
+- `backtest/engine.py` (skip_non_h1_bars)
+- `backtest/fast_screen.py` (两层快筛)
+- `backtest/runner.py` (screen_then_validate)
+- 同步脚本: `deploy/_sync_engine_to_server.py`

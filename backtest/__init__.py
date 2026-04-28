@@ -16,10 +16,16 @@ from backtest.stats import (
 )
 from backtest.runner import (
     DataBundle, run_variant, run_variants, run_kfold,
+    screen_then_validate,
     load_csv, load_m15, load_h1_aligned, add_atr_percentile,
     prepare_indicators_custom, sanitize_for_json,
-    C12_KWARGS, V3_REGIME, TRUE_BASELINE_KWARGS,
+    C12_KWARGS, V3_REGIME, TRUE_BASELINE_KWARGS, LIVE_PARITY_KWARGS,
     M15_CSV_PATH, H1_CSV_PATH,
+)
+from backtest.fast_screen import (
+    fast_backtest_signals, screen_grid, kfold_screen,
+    trades_to_stats as fast_trades_to_stats,
+    SimpleTrade, daily_pnl_correlation, combine_daily_pnl, stats_from_daily,
 )
 
 # Backward compatibility alias for old code that imports _aggregate_daily_pnl

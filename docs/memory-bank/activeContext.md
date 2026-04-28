@@ -131,9 +131,9 @@
 | L3 | MaxHold20+Choppy0.50+Tight_all | 4.07 | 历史 |
 | L5 | L3+TDTP OFF+AllTight Trail | 5.43 | 历史 |
 | L5.1 | L5+SL3.5+MaxPos1 | 6.17 | 历史 |
-| L6 | L5.1+UltraTight2 regime trail | 7.18 | **当前实盘 (2026-04-18 部署)** |
-| L7 | L6+TATrail(s2/d0.75/f0.003)+Gap1h | 7.46 | paper trade 中 |
-| **L7(MH=8)** | L7+MaxHold 20→8 | **9.61~10.14** | **已验证, 待部署** (R28 K-Fold 运行中) |
+| L6 | L5.1+UltraTight2 regime trail | 7.18 | 历史 |
+| L7 | L6+TATrail(s2/d0.75/f0.003)+Gap1h+MH=8 | 7.46 | 历史 |
+| **L8_BASE+Cap80** | ADX14, Tight Trail, TATrail OFF, MH=20, Cap$80 | K-Fold 6/6 (CorrSh 6.27) | **当前实盘 (2026-04-28)** |
 
 ### 新发现的独立策略
 | 策略 | Sharpe | K-Fold | 与L7相关性 | 状态 |
