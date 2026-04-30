@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-04-30
+
+- **R50 L8 全参数暴力搜索完成** (服务器 Westd, 208核):
+  - Layer 1: 5,100 核心参数网格, 7.2h → 最优 E25_M0.8_SL2.0 Sharpe=5.78
+  - Layer 2: 43,200 叠加组合 (Top 20 × 7维叠加层)
+  - Layer 3: Top 50 K-Fold 6-Fold → **0/50 通过**, Fold 3 全面崩溃
+  - Layer 4: 跳过 (无候选通过 K-Fold)
+  - **结论: 48,300 组合搜索未超越 L8_MAX (Sharpe 11.23), 确认 L8_MAX 为全局最优**
+  - 结果归档: `results/round50_results/`
+  - 脚本: `experiments/run_round50_brute_force.py`
+
 ## 2026-04-22
 
 - **R28 L7(MH=8) 完整数据 K-Fold 验证**: 运行中

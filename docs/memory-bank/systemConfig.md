@@ -80,6 +80,33 @@ L8_BASE = LIVE_PARITY 基础上修改 ADX/Trail/TATrail/MH
 - K-Fold 6/6 PASS (CorrSh Mean=6.27, Min=1.14, spread=$0.50)
 - 对比: L7 vs L8_BASE vs L8_HYBRID vs L8c_R39 全面对比
 
+**R49 叠加层优化结果 (2026-04-29):**
+- 裸 L8_BASE: Sharpe=4.69, PnL=$34,143, N=18,206, MaxDD=$416 (spread=$0.50)
+- **L8_MAX = L8_BASE + TATrail(s2/d0.75/f0.003) + H1KC(E15/M2.0) + Cap$30**
+  - **Sharpe=11.23, PnL=$36,582, N=5,573, MaxDD=$60**
+  - Delta vs 裸L8: **+6.54 Sharpe**
+  - Spread 鲁棒: $0.30→12.26, $0.50→11.23, $0.80→9.49, $1.00→8.27
+  - **12/12 年全正** (2015-2026)
+  - K-Fold 通过的层:
+    - H1 KC(E15/M2.0) 同向过滤: K-Fold 6/6, mean delta +6.95
+    - Cap $30: K-Fold 6/6, mean delta +1.70
+    - TATrail(s2/d0.75/f0.003): K-Fold 6/6, mean delta +0.02
+  - K-Fold 未通过的层:
+    - EqCurve: 2/6 (引擎实现过于激进, N仅26)
+    - MaxHold: 3/6 (MH=20已是L8最优)
+    - Session(SkipAsian): 5/6 (差一个fold)
+
+**R50 全参数暴力搜索验证 (2026-04-30):**
+- Layer 1: 5,100 核心参数网格 (KC_EMA 15-40, Mult 0.8-1.6, SL 2.0-3.5, TP 4-16, Trail×0.5-1.5)
+  - 最优: E25_M0.8_SL2.0_TP10_T0.5 Sharpe=5.78 ($0.50 spread)
+  - 参数平坦: Top 100 全在 Sharpe 5.63-5.78，TP 几乎无影响
+- Layer 2: 43,200 叠加组合 (Top 20 × ADX/MH/H1KC/Cap/TATrail/Choppy/EqCurve)
+  - 全样本最高 Sharpe=28.80 (极端过拟合)
+- Layer 3: Top 50 K-Fold 6-Fold → **0/50 通过** (要求全 fold>0 且 mean>2.0)
+  - 全部在 Fold 3 崩溃 (Sharpe=-5.12)，说明 M0.8 参数时间不稳定
+- Layer 4: 跳过 (无候选)
+- **结论: L8_MAX 仍为全局最优，48,300 组合搜索未找到更优参数**
+
 **备注:** EA 源码默认值已更新为 `KCBW_Enabled=false, MaxLoss_USD=80`，与实盘一致。
 
 ### 历史版本: L7

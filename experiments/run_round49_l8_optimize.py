@@ -145,11 +145,12 @@ def apply_cap(trades: List, cap_usd: float) -> List:
     for t in trades:
         if t.pnl < -cap_usd:
             capped.append(TradeRecord(
+                strategy=t.strategy, direction=t.direction,
+                entry_price=t.entry_price, exit_price=t.exit_price,
                 entry_time=t.entry_time, exit_time=t.exit_time,
-                direction=t.direction, entry_price=t.entry_price,
-                exit_price=t.exit_price, pnl=-cap_usd,
+                lots=t.lots, pnl=-cap_usd,
                 exit_reason=f"MaxLossCap${cap_usd}",
-                strategy=t.strategy, bars_held=t.bars_held,
+                bars_held=t.bars_held,
             ))
         else:
             capped.append(t)
@@ -215,22 +216,20 @@ def phase_1(data: DataBundle) -> Dict:
     print(f"  {'-'*20} {'-'*8} {'-'*7} {'-'*6} {'-'*10} {'-'*8}")
 
     eq_results = []
-    for lb in [5, 10, 20, 30]:
-        for cut in [0, -1]:
-            for red in [0.0, 0.5]:
-                tag = f"LB{lb}_C{cut}_R{red}"
-                kw = {**L8_BASE,
-                      'equity_curve_filter': True,
-                      'equity_ma_period': lb}
-                st = run_variant(data, f"EQ_{tag}", verbose=False, **kw)
-                delta = st['sharpe'] - base_sh
-                eq_results.append({
-                    'label': tag, 'lb': lb, 'cut': cut, 'red': red,
-                    'sharpe': st['sharpe'], 'pnl': st['total_pnl'],
-                    'n': st['n'], 'max_dd': st['max_dd'], 'delta': delta,
-                })
-                print(f"  {tag:>20} {st['sharpe']:>8.2f} {delta:>+7.2f} "
-                      f"{st['n']:>6} ${st['total_pnl']:>9.0f} ${st['max_dd']:>7.0f}")
+    for lb in [10, 30, 50]:
+        tag = f"LB{lb}"
+        kw = {**L8_BASE,
+              'equity_curve_filter': True,
+              'equity_ma_period': lb}
+        st = run_variant(data, f"EQ_{tag}", verbose=False, **kw)
+        delta = st['sharpe'] - base_sh
+        eq_results.append({
+            'label': tag, 'lb': lb, 'cut': 0, 'red': 0,
+            'sharpe': st['sharpe'], 'pnl': st['total_pnl'],
+            'n': st['n'], 'max_dd': st['max_dd'], 'delta': delta,
+        })
+        print(f"  {tag:>20} {st['sharpe']:>8.2f} {delta:>+7.2f} "
+              f"{st['n']:>6} ${st['total_pnl']:>9.0f} ${st['max_dd']:>7.0f}")
 
     best_eq = max(eq_results, key=lambda x: x['sharpe'])
     results['tests']['eqcurve'] = {

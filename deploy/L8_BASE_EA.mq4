@@ -45,7 +45,7 @@ extern double Regime_High_Dist  = 0.008;     // L8
 
 //--- H1 KC Filter
 extern bool   H1_Filter_Enabled = true;
-extern int    H1_KC_EMA_Period  = 20;
+extern int    H1_KC_EMA_Period  = 15;        // R49 最优 (原20)
 extern double H1_KC_Multiplier  = 2.0;
 extern int    H1_ATR_Period     = 14;
 
@@ -67,7 +67,7 @@ extern int    KCBW_Lookback     = 5;
 extern double KCBW_Min_Ratio    = 0.0;
 
 extern bool   MaxLoss_Enabled   = true;
-extern double MaxLoss_USD       = 80.0;      // Cap $80
+extern double MaxLoss_USD       = 30.0;      // R49 K-Fold 6/6, Cap$30 最优
 
 extern bool   Session_Filter    = false;
 extern int    Session_Skip_Start = 2;
