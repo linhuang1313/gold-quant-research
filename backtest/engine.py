@@ -268,6 +268,10 @@ class BacktestEngine:
         profit_reinvest_pct: float = 0.0,  # fraction of profits to reinvest into capital (0-1)
         equity_curve_filter: bool = False,  # only trade when equity > its own MA
         equity_ma_period: int = 50,         # MA period for equity curve filter (in trades)
+        # R53: MaxLoss Cap — per-trade floating loss hard limit (0 = disabled)
+        maxloss_cap: float = 0,
+        # R53B: Dynamic ATR Cap — maxloss = N * ATR * lots * POINT_VALUE (0 = use fixed cap)
+        maxloss_cap_atr_mult: float = 0,
         # Performance: when no positions and not H1 boundary, skip the bar entirely.
         # Gives ~1.6x speedup by avoiding H1 window lookup + M15 window slicing.
         # Trade-off: M15-only signals (RSI) on non-H1 bars are not checked when flat.
@@ -493,6 +497,9 @@ class BacktestEngine:
         self._profit_reinvest_pct = profit_reinvest_pct
         self._equity_curve_filter = equity_curve_filter
         self._equity_ma_period = equity_ma_period
+        self._maxloss_cap = maxloss_cap
+        self._maxloss_cap_atr_mult = maxloss_cap_atr_mult
+        self.maxloss_cap_count = 0
         self._skip_non_h1_bars = skip_non_h1_bars
         self._consecutive_wins = 0
         self._consecutive_losses = 0
@@ -888,6 +895,22 @@ class BacktestEngine:
                 elif low <= pos.tp_price:
                     reason = "TP"
                     exit_price = pos.tp_price
+
+            # 1a. MaxLoss Cap — per-trade floating loss hard limit
+            cap_limit = self._maxloss_cap
+            if self._maxloss_cap_atr_mult > 0:
+                atr_cap = self._get_h1_atr_at(h1_idx)
+                if atr_cap > 0:
+                    cap_limit = self._maxloss_cap_atr_mult * atr_cap * pos.lots * config.POINT_VALUE_PER_LOT
+            if not reason and cap_limit > 0:
+                if pos.direction == 'BUY':
+                    float_pnl = (close - pos.entry_price) * pos.lots * config.POINT_VALUE_PER_LOT
+                else:
+                    float_pnl = (pos.entry_price - close) * pos.lots * config.POINT_VALUE_PER_LOT
+                if float_pnl < -cap_limit:
+                    reason = "MaxLossCap"
+                    exit_price = close
+                    self.maxloss_cap_count += 1
 
             # 1b. Breakeven stop: move SL to entry when profit exceeds threshold
             if not reason and self._breakeven_after_atr > 0 and pos.strategy == 'keltner':

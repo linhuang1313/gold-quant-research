@@ -30,7 +30,7 @@
 
 ---
 
-## 进行中 / 已完成实验 (2026-04-30 更新)
+## 进行中 / 已完成实验 (2026-05-01 更新)
 
 ### R25-R28 D1/H4 Keltner + 综合验证 — 已完成
 
@@ -49,6 +49,19 @@
   - P1-5 MaxHold sweep: D1 最优 MH=8 (Sharpe 6.03, K-Fold 6/6 mean=9.16); H4 最优 MH=20 (Sharpe 4.64, K-Fold 6/6 mean=6.27)
   - P2-6 Lot 优化: L7(1.0x)+H4(0.5x) 最佳平衡 (Sharpe 8.99, PnL $72,664, MaxDD $311)
 - **R28 L7(MH=8) 完整数据 K-Fold** — 运行中, 验证 L7 核心策略在 MH=8 下的 6-Fold 鲁棒性
+
+### R69 P6 参数对账 — 已完成 (2026-05-01)
+
+- **背景**: P6 组合的 EA 部署参数来自 R56，R61 在 Cap$37 下探索了不同 PSAR/SESS_BO 参数
+  - PSAR: R56 SL=4.5/MH=20 vs R61 SL=2.0/MH=80
+  - SESS_BO: R56 LB=4/SL=4.5/TP=4.0 vs R61 LB=3/SL=3.0/TP=6.0
+- **Path A (Portfolio 层面)**: R56 参数在 Cap$37 下 10/10 K-Fold PASS，最优 KF mean=8.031 > R61 的 7.813
+- **Path B (单策略 K-Fold + Walk-Forward)**:
+  - PSAR: R56 KF mean=5.592 > R61 5.213；WF OOS avg 6.419 > 5.760
+  - SESS_BO: R56 KF mean=7.877 > R61 6.381；WF OOS avg 9.467 > 6.997
+- **结论: P6 的 R56 (EA) 参数在所有维度上优于 R61，实盘不需要更改**
+- R61 参数变化是 full-sample 过拟合
+- 脚本: `experiments/run_r69_param_reconcile.py`, 结果: `results/r69_param_reconcile/`
 
 ### R21 四个新赚钱维度 — 已完成
 
@@ -121,6 +134,9 @@
 | R35 | 全策略深度验证 | **H1 KC参数无cliff(11.57-14.19)**, TSMOM最优SL4/TP12/MH80, 组合K-Fold 6/6(9.44-11.64), ST/PSAR均6/6通过 | results/round35 |
 | R36 | 实盘边际优化 | 22/22半年窗口全正Sharpe(12.9-17.8), MC 200次@$1.00 spread最差Sharpe仍9.99, 亚洲盘排除+1.23 | results/round36 |
 | R50 | L8全参数暴力搜索 | **48,300组合搜索, 0/50通过K-Fold**, L8_MAX仍为全局最优, 参数空间已充分搜索 | results/round50_results |
+| R51 | 独立策略全参数暴力搜索 | **120,240组合**: D1KC 50/50 KF, H4KC 50/50 KF, PSAR 50/50 KF, **SuperTrend否决(0正Sharpe)** | results/round51_results |
+| R52 | 多策略Lot组合优化 | **6,560组合+30 K-Fold全PASS**, 最优4策略组合Sharpe=5.18 KF_mean=5.75 | results/round52_results |
+| R69 | P6 参数对账 (R56 vs R61) | **P6的R56(EA)参数全面优于R61**: PSAR KF 5.59>5.21, SESS_BO KF 7.88>6.38, WF OOS均R56更优; **实盘无需更改** | results/r69_param_reconcile |
 
 ---
 
@@ -135,13 +151,21 @@
 | L6 | L5.1+UltraTight2 regime trail | 7.18 | 历史 |
 | L7 | L6+TATrail(s2/d0.75/f0.003)+Gap1h+MH=8 | 7.46 | 历史 |
 | **L8_BASE+Cap80** | ADX14, Tight Trail, TATrail OFF, MH=20, Cap$80 | K-Fold 6/6 (CorrSh 6.27) | **当前实盘 (2026-04-28)** |
+| **P6** | 6策略组合: L8_MAX+D1KC+H4KC+PSAR+TSMOM+SESS_BO, R56参数 | Portfolio KF mean=8.03 | **当前实盘组合 (2026-05-01 R69确认)** |
 
-### 新发现的独立策略
+### P6 组合成员
+| 策略 | EA文件 | 时间框架 | Lot | 关键参数 | 状态 |
+|------|--------|---------|-----|---------|------|
+| **L8_MAX** | L8_BASE_EA.mq4 | M15 | 0.01 | SL=3.5ATR, TP=8.0ATR, MH=20, MaxLoss=$30 | 实盘运行中 |
+| **D1_KC** | D1_KC_EA.mq4 | D1 | 0.04 | E10/M2.5/ADX18, SL=4.5ATR, TP=8.0ATR | 实盘运行中 |
+| **H4_KC** | H4_KC_EA.mq4 | H4 | 0.01 | E15/M2.5/ADX10, SL=4.5ATR, TP=6.0ATR, MH=50 | 实盘运行中 |
+| **PSAR** | PSAR_H1_EA.mq4 | H1 | 0.03 | AF0.01/0.05, SL=4.5ATR, TP=16.0ATR, MH=20 | 实盘运行中 |
+| **TSMOM** | TSMOM_H1_EA.mq4 | H1 | 0.04 | Fast=480/Slow=720, SL=4.5ATR, TP=6.0ATR, MH=20 | 实盘运行中 |
+| **SESS_BO** | Session_BO_H1_EA.mq4 | H1 | 0.04 | Peak12-14, LB=4, SL=4.5ATR, TP=4.0ATR, MH=20 | 实盘运行中 |
+
+### 其他已验证策略
 | 策略 | Sharpe | K-Fold | 与L7相关性 | 状态 |
 |------|--------|--------|-----------|------|
-| **D1 Keltner** (EMA20/M2.0/ADX18/MH=8) | 6.03 | 6/6 (mean=9.16) | 0.17 | 已验证, 待部署 |
-| **H4 Keltner** (EMA20/M2.0/ADX18/MH=20) | 4.64 | 6/6 (mean=6.27) | 0.22 | 已验证, 待部署 |
-| **TSMOM** (20d+60d, H1, SL3.5/TP12/MH50) | 5.40 | 6/6 (mean=6.02) | <0.05 | 已验证, 模拟盘运行中 |
 | S1 Squeeze Straddle | 1.67 | 6/6 | -0.01 | 待引擎实现 |
 | S3 Overnight Hold | 0.88 | 6/6 | -0.03 | 待部署 |
 
@@ -191,6 +215,13 @@
 43. **MC 200次@$1.00spread仍Sharpe≥10** (R36-G): 最极端条件(均值$1, std $0.5)最差仍9.99, 100%概率>0
 44. **Session-aware spread模型** (R36-G): 亚洲盘$0.80/NFP $1.50/其他$0.35, 均值Sharpe=12.93, 100%>0
 45. **L8_MAX已是全局最优** (R50): 48,300组合暴力搜索(5,100核心+43,200叠加), Top50全部K-Fold FAIL(0/50), 参数空间充分覆盖, 无法超越L8_MAX(Sharpe 11.23)
+46. **D1 KC暴力搜索最优** (R51): E10/M2.5/ADX18/SL4.5, 57,600组合, 50/50 K-Fold PASS, KF_mean=34.66, 47笔交易100%WR, Sharpe 18.38
+47. **H4 KC暴力搜索最优** (R51): E15/M2.5/ADX10/SL4.5/MH50, 48,000组合, 50/50 K-Fold PASS, KF_mean=6.58, 1199笔85.7%WR, Sharpe 5.12
+48. **PSAR暴力搜索最优** (R51): AF0.01/MX0.05/SL4.5/MH20, 6,000组合, 50/50 K-Fold PASS, KF_mean=4.36, 3155笔79.2%WR, Sharpe 4.13
+49. **SuperTrend H1黄金完全否决** (R51): 8,640组合, 0个正Sharpe, 在H1黄金上彻底无效
+50. **4策略Lot最优组合** (R52): L8(0.02)+D1KC(0.06)+H4KC(0.02)+PSAR(0.05)=Sharpe 5.18, KF_mean=5.75, PnL=$88K, MaxDD=$330, 30/30 K-Fold PASS
+51. **D1 KC是最大lot贡献者** (R52): 最优组合中D1 KC lot占比最高(0.06-0.10), 是组合收益的核心驱动力
+52. **P6组合R56参数已确认最优** (R69): PSAR SL=4.5/MH=20 KF mean 5.59 > R61的2.0/80 mean 5.21; SESS_BO LB=4/SL=4.5/TP=4.0 KF 7.88 > R61的3/3.0/6.0 KF 6.38; WF OOS同样R56更优; R61参数为full-sample过拟合, **P6实盘无需更改**
 
 ### 已否决方向汇总
 - PA形态 (R11): Pinbar/Fractal/InsideBar/Engulfing 全部 K-Fold 0/6
@@ -210,6 +241,7 @@
 - GVZ 仓位管理 (R33-B): 最优仅+0.47, 但损失大量PnL
 - Tick 微观结构 (R34): 大跳无方向偏差, spread spikes集中在亚洲盘(23:00), 无可用信号
 - L8 全参数暴力替代 (R50): 48,300组合(Mult0.8-1.6/SL2.0-3.5/各种叠加), K-Fold 0/50通过, Fold3全面崩溃, M0.8等替代参数时间不稳定
+- SuperTrend H1黄金 (R51): 8,640组合全部Sharpe≤0, 在H1黄金上完全不可用
 
 ---
 

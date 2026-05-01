@@ -454,6 +454,7 @@ def run_variant(data: DataBundle, label: str, *, verbose: bool = True, **engine_
     stats['dd_pause_count'] = getattr(engine, 'dd_pause_count', 0)
     stats['dd_reduce_count'] = getattr(engine, 'dd_reduce_count', 0)
     stats['equity_filter_skip'] = getattr(engine, 'equity_filter_skip_count', 0)
+    stats['maxloss_cap_count'] = getattr(engine, 'maxloss_cap_count', 0)
     stats['final_capital'] = getattr(engine, '_current_capital', 0)
     stats['equity_peak'] = getattr(engine, '_equity_peak', 0)
     stats['skipped_no_signal'] = getattr(engine, 'skipped_no_signal', 0)

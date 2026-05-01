@@ -16,7 +16,7 @@
 #property strict
 
 //--- 交易参数
-extern double LotSize          = 0.03;
+extern double LotSize          = 0.01;       // R56 最优组合推荐
 extern int    MagicNumber      = 20250427;
 extern int    MaxSlippage       = 30;
 

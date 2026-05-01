@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-05-01
+
+- **R69 P6 参数对账完成** (本地, 16.5min):
+  - 背景: EA部署参数来自R56, R61在Cap$37下探索了不同PSAR/SESS_BO参数, 需确认哪组更优
+  - 参数差异: PSAR SL 4.5→2.0, MH 20→80; SESS_BO LB 4→3, SL 4.5→3.0, TP 4.0→6.0
+  - Path A (Portfolio Lot Grid + K-Fold):
+    - R56 params: 10/10 K-Fold PASS, 最优KF mean=8.031
+    - R61 params: 10/10 K-Fold PASS, 最优KF mean=7.813
+  - Path B (Per-Strategy K-Fold + Walk-Forward):
+    - PSAR: R56 KF mean=5.592 > R61 5.213; WF OOS avg 6.419 > 5.760
+    - SESS_BO: R56 KF mean=7.877 > R61 6.381; WF OOS avg 9.467 > 6.997
+  - **结论: P6的R56(EA)参数在所有维度上优于R61, 实盘无需更改**
+  - R61参数变化(更小SL/更大MH/TP)是full-sample过拟合
+  - 脚本: `experiments/run_r69_param_reconcile.py`
+  - 结果: `results/r69_param_reconcile/r69_summary.txt`, `r69_results.json`
+
+## 2026-04-30 (晚间)
+
+- **R51 独立策略全参数暴力搜索完成** (Westd 208核, ~50min):
+  - D1 KC: 57,600组合 → 56,720正Sharpe → Top 50 K-Fold **50/50 PASS**
+    - 最优: E10/M2.5/ADX18/SL4.5/Trail0.2/0.05, Sharpe 18.38, KF=34.66
+    - 注意: N=47, 100%WR, 交易频率低但Sharpe极高
+  - H4 KC: 48,000组合 → 全部正Sharpe → Top 50 K-Fold **50/50 PASS**
+    - 最优: E15/M2.5/ADX10/SL4.5/MH50/Trail0.2/0.04, Sharpe 5.12, KF=6.58
+    - 1199笔交易, 85.7%WR, PnL $15K, MaxDD $337
+  - PSAR: 6,000组合 → 全部正Sharpe → Top 50 K-Fold **50/50 PASS**
+    - 最优: AF0.01/MX0.05/SL4.5/MH20/Trail0.2/0.04, Sharpe 4.13, KF=4.36
+    - 3155笔交易, 79.2%WR, PnL $17K, MaxDD $311
+  - **SuperTrend H1: 8,640组合, 0个正Sharpe — 完全否决**
+  - 性能优化: ST/PSAR指标预计算避免worker重复计算, 从卡住→2min完成
+
+- **R52 多策略Lot组合优化完成** (Westd, ~23min):
+  - 4策略(L8_MAX+D1KC+H4KC+PSAR) × 9种lot × 4维 = 6,560组合
+  - Grid Sharpe Top 30 → K-Fold **30/30 全PASS**
+  - 最优组合: L8=0.02, D1=0.06, H4=0.02, PSAR=0.05, Total=0.15 lot
+    - Sharpe=5.18, KF_mean=5.75, KF_min=3.79
+    - PnL=$88,407, MaxDD=$330, PnL/lot=$589K
+  - 关键发现: D1 KC是组合中lot占比最高的策略(0.06-0.10)
+
+- 新增脚本: `experiments/run_round51_independent_grids.py`, `experiments/run_round52_lot_portfolio.py`
+- 新增部署: `deploy/deploy_r51.py`, `deploy/deploy_r52.py`
+
 ## 2026-04-30
 
 - **R50 L8 全参数暴力搜索完成** (服务器 Westd, 208核):

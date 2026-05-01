@@ -28,5 +28,7 @@ from backtest.fast_screen import (
     SimpleTrade, daily_pnl_correlation, combine_daily_pnl, stats_from_daily,
 )
 
+from backtest.validator import StrategyValidator, ValidatorConfig
+
 # Backward compatibility alias for old code that imports _aggregate_daily_pnl
 _aggregate_daily_pnl = aggregate_daily_pnl
