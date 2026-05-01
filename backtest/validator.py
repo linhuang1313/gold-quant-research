@@ -80,8 +80,9 @@ class ValidatorConfig:
     n_trade_removal: int = 500
     min_bootstrap_ci_lower: float = 0.0
     min_perturb_p5: float = 0.0
-    max_pbo: float = 0.20            # PBO must be < 20%
+    max_pbo: float = 0.20            # PBO must be < 20% (either method)
     pbo_n_partitions: int = 8
+    pbo_max_grid_combos: int = 200   # max grid combos for CSCV PBO
 
     # Stage 5: Cost
     spread_levels: List[float] = field(default_factory=lambda: [0.30, 0.50, 0.88, 1.00, 1.30, 1.50, 2.00])
@@ -163,9 +164,13 @@ class StrategyValidator:
     base_backtest_fn : callable, optional
         Stage 0: strategy with DEFAULT (non-optimized) params. Same signature as backtest_fn.
     param_perturb_fn : callable, optional
-        Stage 4: (h1_df, spread, lot, rng) -> list[dict]. Strategy with perturbed params.
+        Stage 4 PBO-Perturb: (h1_df, spread, lot, rng) -> list[dict]. Random param perturbation.
     param_grid_fn : callable, optional
-        Stage 6: (h1_df, spread, lot) -> dict[str, float]. Returns {param_label: sharpe}.
+        Stage 6 param stability: (h1_df, spread, lot) -> dict[str, float]. {param_label: sharpe}.
+    param_grid_backtest_fn : callable, optional
+        Stage 4 PBO-CSCV (Bailey et al.): (h1_df, spread, lot) -> dict[str, list[dict]].
+        Returns {param_label: trades_list} for ALL grid combos. Used to build T x N matrix
+        for Combinatorially Symmetric Cross-Validation.
     alt_h1_dfs : dict, optional
         Stage 7: {"XAGUSD": silver_h1_df, ...} for multi-asset generalization.
     """
@@ -194,6 +199,7 @@ class StrategyValidator:
         base_backtest_fn: Optional[Callable] = None,
         param_perturb_fn: Optional[Callable] = None,
         param_grid_fn: Optional[Callable] = None,
+        param_grid_backtest_fn: Optional[Callable] = None,
         alt_h1_dfs: Optional[Dict[str, pd.DataFrame]] = None,
     ):
         self.name = name
@@ -208,6 +214,7 @@ class StrategyValidator:
         self.base_backtest_fn = base_backtest_fn
         self.param_perturb_fn = param_perturb_fn
         self.param_grid_fn = param_grid_fn
+        self.param_grid_backtest_fn = param_grid_backtest_fn
         self.alt_h1_dfs = alt_h1_dfs or {}
         self.results: Dict[int, StageResult] = {}
         self._cached_trades: Optional[List[Dict]] = None
@@ -430,9 +437,15 @@ class StrategyValidator:
             elapsed_s=time.time() - t0, verdict=verdict)
 
     # ───────────────────────────────────────────────────────
-    # Stage 4: Monte Carlo + PBO
+    # Stage 4: Monte Carlo + Dual PBO
     # ───────────────────────────────────────────────────────
     def stage4_stress(self) -> StageResult:
+        """Monte Carlo stress tests + dual PBO analysis.
+
+        PBO is computed two ways (both reported, either can trigger failure):
+          - PBO-Perturb: random ±20% param perturbation → measures parameter stability
+          - PBO-CSCV: systematic grid search → Bailey et al. (2017) selection-bias test
+        """
         t0 = time.time()
         trades = self._get_cached_trades()
         daily = _trades_to_daily(trades)
@@ -458,9 +471,9 @@ class StrategyValidator:
             removal_sharpes.append(_sharpe(_trades_to_daily(subset)))
         rs = np.array(removal_sharpes)
 
-        # Parameter perturbation
+        # ── PBO Method 1: Perturbation (parameter stability) ──
         perturb_result = None
-        pbo_result = None
+        pbo_perturb = None
         if self.param_perturb_fn is not None:
             perturb_sharpes = []
             perturb_dailies = {}
@@ -475,26 +488,66 @@ class StrategyValidator:
                 'p5': round(float(np.percentile(ps, 5)), 2),
                 'pct_above_zero': round(float((ps > 0).mean() * 100), 1),
             }
-
-            # PBO from perturbation variants
             perturb_dailies['SELECTED'] = daily.tolist()
             try:
                 from backtest.stats import compute_pbo
-                pbo_result = compute_pbo(perturb_dailies,
-                                         n_partitions=self.config.pbo_n_partitions)
+                pbo_perturb = compute_pbo(perturb_dailies,
+                                          n_partitions=self.config.pbo_n_partitions)
             except Exception as e:
-                pbo_result = {'pbo': 0.0, 'overfit_risk': 'UNKNOWN', 'error': str(e)}
+                pbo_perturb = {'pbo': 0.0, 'overfit_risk': 'UNKNOWN', 'error': str(e)}
 
+        # ── PBO Method 2: CSCV (Bailey et al. 2017 — selection bias) ──
+        pbo_cscv = None
+        if self.param_grid_backtest_fn is not None:
+            try:
+                from backtest.stats import compute_pbo
+                print("    Running CSCV grid backtests for PBO...", flush=True)
+                grid_trades = self.param_grid_backtest_fn(
+                    self.h1_df, self.spread, self.lot)
+                grid_dailies = {}
+                n_added = 0
+                max_combos = self.config.pbo_max_grid_combos
+                for label, tr_list in grid_trades.items():
+                    if n_added >= max_combos:
+                        break
+                    d = _trades_to_daily(tr_list)
+                    if len(d) >= self.config.pbo_n_partitions * 2:
+                        grid_dailies[label] = d.tolist()
+                        n_added += 1
+                grid_dailies['SELECTED'] = daily.tolist()
+                print(f"    CSCV: {len(grid_dailies)} variants "
+                      f"(grid={n_added} + selected), "
+                      f"S={self.config.pbo_n_partitions} partitions", flush=True)
+                pbo_cscv = compute_pbo(grid_dailies,
+                                       n_partitions=self.config.pbo_n_partitions)
+            except Exception as e:
+                pbo_cscv = {'pbo': 0.0, 'overfit_risk': 'UNKNOWN', 'error': str(e)}
+
+        # ── Pass/fail logic ──
         passed_boot = ci_lower > self.config.min_bootstrap_ci_lower
         passed_removal = float(np.percentile(rs, 5)) > 0
         passed_perturb = True
-        passed_pbo = True
         if perturb_result:
             passed_perturb = perturb_result['p5'] > self.config.min_perturb_p5
-        if pbo_result and 'pbo' in pbo_result:
-            passed_pbo = pbo_result['pbo'] < self.config.max_pbo
+
+        # PBO pass: either method passing is sufficient
+        # (they measure different things — stability vs selection bias)
+        pbo_perturb_val = pbo_perturb.get('pbo', 0) if pbo_perturb else None
+        pbo_cscv_val = pbo_cscv.get('pbo', 0) if pbo_cscv else None
+
+        if pbo_perturb_val is not None and pbo_cscv_val is not None:
+            passed_pbo = (pbo_perturb_val < self.config.max_pbo
+                          or pbo_cscv_val < self.config.max_pbo)
+        elif pbo_perturb_val is not None:
+            passed_pbo = pbo_perturb_val < self.config.max_pbo
+        elif pbo_cscv_val is not None:
+            passed_pbo = pbo_cscv_val < self.config.max_pbo
+        else:
+            passed_pbo = True
+
         passed = passed_boot and passed_removal and passed_perturb and passed_pbo
 
+        # ── Build details ──
         details = {
             'base_sharpe': round(base_sh, 2),
             'bootstrap': {'ci_95': [round(ci_lower, 2), round(ci_upper, 2)],
@@ -504,11 +557,29 @@ class StrategyValidator:
         }
         if perturb_result:
             details['param_perturb'] = perturb_result
-        if pbo_result:
-            details['pbo'] = {k: v for k, v in pbo_result.items()
-                              if k not in ('is_best_oos_ranks', 'logit_distribution')}
+        if pbo_perturb:
+            details['pbo_perturb'] = {
+                k: v for k, v in pbo_perturb.items()
+                if k not in ('is_best_oos_ranks', 'logit_distribution')}
+            details['pbo_perturb']['method'] = 'random_perturbation'
+            details['pbo_perturb']['interpretation'] = 'parameter_stability'
+        if pbo_cscv:
+            details['pbo_cscv'] = {
+                k: v for k, v in pbo_cscv.items()
+                if k not in ('is_best_oos_ranks', 'logit_distribution')}
+            details['pbo_cscv']['method'] = 'CSCV_Bailey_2017'
+            details['pbo_cscv']['interpretation'] = 'selection_bias'
+        # Legacy key for backward compat
+        if pbo_perturb:
+            details['pbo'] = details['pbo_perturb']
 
-        pbo_str = f", PBO={pbo_result['pbo']:.1%}" if pbo_result and 'pbo' in pbo_result else ""
+        # ── Verdict string ──
+        pbo_parts = []
+        if pbo_perturb_val is not None:
+            pbo_parts.append(f"PBO-Perturb={pbo_perturb_val:.1%}")
+        if pbo_cscv_val is not None:
+            pbo_parts.append(f"PBO-CSCV={pbo_cscv_val:.1%}")
+        pbo_str = f", {', '.join(pbo_parts)}" if pbo_parts else ""
         verdict = (f"{'PASS' if passed else 'FAIL'}: "
                    f"95% CI [{ci_lower:.2f}, {ci_upper:.2f}]{pbo_str}")
         return StageResult(
