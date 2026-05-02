@@ -5,7 +5,54 @@
 
 ---
 
+## 2026-05-02
+
+- **R90 Full External Data Integration — 服务器5 Phase全部完成**:
+  - Phase A: 宏观Regime检测(9.3s) — Rule-Based最佳(ANOVA F=10.81, p=0.00002), 3 Regime
+  - Phase B: 因子增强信号过滤(58min) — 720种组合, 仅TSMOM+COPPER_GOLD_RATIO(Q20)通过K-Fold
+  - Phase C: ML方向预测(15s) — AUC≈0.53, 回测亏损, 纯方向预测对黄金无效
+  - Phase D: ML Exit优化(97s) — TSMOM+XGBoost AUC=0.781(>R62基线0.76), Sharpe+49%; 所有策略过滤后Sharpe均提升
+  - Phase E: 动态组合配置(134s) — Dynamic Sharpe 6.62 vs Static 6.37, K-Fold仅2/6, 推荐静态
+  - 修复多个timezone/数据对齐bug(Phase B allowed_dates, C dropna, D tz-aware比较, E regime lookup)
+  - 外部数据源: VIX, DXY, US10Y, GLD, COT, SPX, GVZ, HYG, TIPS, Fed Funds, US2Y, USDJPY, USDCNH, WTI, Copper, GLD Holdings, M2
+  - 脚本: `experiments/run_r90_full.py` + `run_r90a~e_*.py`
+  - 部署: `deploy/deploy_r90.py`, `_r90_check.py`, `_r90_download.py` 等
+  - 结果: `results/r90_external_data/`
+
+- **R91 Warsh Regime Analysis — 本地完成(142s)**:
+  - 沃什三情景Regime分类: A(渐进正常化)66%, B(激进紧缩)15%, C(政治化宽松)19%
+  - Taylor Rule偏差对比: 简单偏差与金价相关性+0.100 > 市场基础偏差-0.043
+  - 政治化风险得分: 均值26.4, P75=32.8, 最大58.8
+  - 黄金在Regime C最强: 年化+28.9%, Sharpe 1.45
+  - TSMOM在非正常化Regime爆发: B=17.18, C=11.01
+  - 脚本: `experiments/run_r91_warsh_regime.py`
+  - 结果: `results/r91_warsh_regime/`
+
+- **R88 Per-Strategy Cap Grid完成(本地)**:
+  - 实盘4策略(L8_MAX 0.05, TSMOM 0.04, SESS_BO 0.02, PSAR 0.01)逐策略MaxLoss Cap网格搜索
+  - 最优: L8_MAX=$35, PSAR=$5, TSMOM=NoCap, SESS_BO=$35
+  - 脚本: `experiments/run_r88_cap_grid.py`
+
+- **R89 Lot Size Optimizer完成(本地)**:
+  - $5,000本金, 组合MaxDD<$1,000约束
+  - 推荐: L8=0.02, PSAR=0.09, TSMOM=0.08, SESS_BO=0.08
+  - Portfolio Sharpe=6.37, PnL=$125,689, MaxDD=$420
+  - 脚本: `experiments/run_r89_lot_optimizer.py`
+
+- **外部数据库扩展**:
+  - 新增10个数据源: Copper, Crude WTI, Fed Funds, GLD Holdings, HYG, M2, Real Yield, US2Y, USDJPY, USDCNH
+  - 更新download_external.py支持全部17个数据源
+  - aligned_daily.csv整合所有外部数据为统一日频DataFrame
+
 ## 2026-05-01
+
+- **新增 `docs/memory-bank/literature_notes.md` 知识沉淀文档**:
+  - 石川博士「川流不息」专栏系统性梳理: 回测过拟合(PBO/CSCV)、金融数学基础(GARCH/布朗运动/BS/凯利)、趋势跟踪策略、资产配置
+  - Clever Liu「量化交易系列」7篇完整学习: Alpha来源、三大经典策略、风险管理三层防御、多因子模型、五大认知陷阱、散户生存之道、策略公开悖论
+  - Clever Liu TradingView 236策略回测: 低频策略优势验证(年交易>200次全部亏损转正)
+  - Clever Liu Agentic AI因子挖掘: 统计弹性(Statistical Resilience)概念
+  - 知识映射总表: 17项外部知识点 vs 我们项目实践的对照
+  - 识别待深入方向: 市场适应机制、CVaR、策略拥挤度、半凯利动态仓位、因子分解归因
 
 - **R69 P6 参数对账完成** (本地, 16.5min):
   - 背景: EA部署参数来自R56, R61在Cap$37下探索了不同PSAR/SESS_BO参数, 需确认哪组更优

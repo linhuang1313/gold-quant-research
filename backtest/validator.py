@@ -286,8 +286,11 @@ class StrategyValidator:
         wr = wins / n_trades * 100 if n_trades > 0 else 0
         dd_pct = (dd / pnl * 100) if pnl > 0 else 999
 
+        # R87-A: CVaR / tail risk metrics
+        from backtest.stats import deflated_sharpe, probabilistic_sharpe, compute_risk_metrics
+        risk_metrics = compute_risk_metrics(daily.tolist())
+
         # DSR: correct for selection bias from multiple testing
-        from backtest.stats import deflated_sharpe, probabilistic_sharpe
         daily_list = daily.tolist()
         dsr_result = deflated_sharpe(daily_list, n_trials=self.config.n_trials_tested)
         psr_result = probabilistic_sharpe(daily_list, sharpe_benchmark=0.0)
@@ -322,6 +325,7 @@ class StrategyValidator:
                 'n_trials': self.config.n_trials_tested,
                 'psr': round(psr_result.get('psr', 0), 4),
                 'psr_p_value': round(psr_result.get('p_value', 1), 4),
+                'risk_metrics': risk_metrics,
             },
             elapsed_s=time.time() - t0, verdict=verdict)
 
@@ -744,6 +748,20 @@ class StrategyValidator:
             'backtest_worst_month': round(worst_month, 2),
             'backtest_max_consec_loss_days': max_consec_loss,
         }
+
+        # R87-A: CVaR-based position sizing recommendation
+        from backtest.stats import compute_risk_metrics
+        risk_m = compute_risk_metrics(daily.tolist())
+        cvar_99 = abs(risk_m.get('cvar_99', 0))
+        if cvar_99 > 0 and self.lot > 0:
+            acceptable_daily_loss = 100.0  # default: $100 max acceptable daily loss
+            cvar_max_lot = round(acceptable_daily_loss / cvar_99 * self.lot, 2)
+            stop_criteria['cvar_99'] = risk_m['cvar_99']
+            stop_criteria['cvar_95'] = risk_m['cvar_95']
+            stop_criteria['cvar_max_lot_suggestion'] = cvar_max_lot
+            stop_criteria['cvar_basis'] = (
+                f"max_lot={cvar_max_lot} based on |CVaR99|=${cvar_99:.0f}/day, "
+                f"target max_daily_loss=$100")
 
         # Multi-asset generalization (optional, informational only)
         multi_asset = {}

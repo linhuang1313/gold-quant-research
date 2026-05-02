@@ -30,7 +30,7 @@
 
 ---
 
-## 进行中 / 已完成实验 (2026-05-01 更新)
+## 进行中 / 已完成实验 (2026-05-02 更新)
 
 ### R25-R28 D1/H4 Keltner + 综合验证 — 已完成
 
@@ -49,6 +49,40 @@
   - P1-5 MaxHold sweep: D1 最优 MH=8 (Sharpe 6.03, K-Fold 6/6 mean=9.16); H4 最优 MH=20 (Sharpe 4.64, K-Fold 6/6 mean=6.27)
   - P2-6 Lot 优化: L7(1.0x)+H4(0.5x) 最佳平衡 (Sharpe 8.99, PnL $72,664, MaxDD $311)
 - **R28 L7(MH=8) 完整数据 K-Fold** — 运行中, 验证 L7 核心策略在 MH=8 下的 6-Fold 鲁棒性
+
+### R88 Per-Strategy Cap Grid — 已完成 (2026-05-01)
+
+- 针对实盘4策略手数(L8_MAX 0.05, TSMOM 0.04, SESS_BO 0.02, PSAR 0.01)做 MaxLoss Cap 网格搜索
+- 最优Cap: L8_MAX=$35, PSAR=$5, TSMOM=NoCap, SESS_BO=$35
+- 脚本: `experiments/run_r88_cap_grid.py`
+
+### R89 Lot Size Optimizer — 已完成 (2026-05-01)
+
+- $5,000本金, 组合MaxDD<$1,000约束下的最优手数搜索
+- R89推荐手数: L8_MAX=0.02, PSAR=0.09, TSMOM=0.08, SESS_BO=0.08
+- Portfolio Sharpe=6.37, PnL=$125,689, MaxDD=$420
+- 脚本: `experiments/run_r89_lot_optimizer.py`
+
+### R90 Full External Data Integration — 已完成 (2026-05-02, 服务器)
+
+- **Phase A: 宏观Regime检测** (9.3s) — Rule-Based最佳(ANOVA F=10.81, p=0.00002), 3 Regime(Bearish/Bullish/Neutral)
+- **Phase B: 因子增强信号过滤** (58min) — 720种组合, 唯一通过K-Fold: TSMOM+COPPER_GOLD_RATIO(Q20)
+- **Phase C: ML方向预测** (15s) — 1日AUC=0.527, 5日AUC=0.545, 回测亏损, **纯方向预测对黄金无效**
+- **Phase D: ML Exit优化** (97s) — TSMOM+XGBoost AUC=0.781(超越R62基线0.76), Sharpe 6.99→10.43(+49%); 所有策略过滤后Sharpe均优于基线
+- **Phase E: 动态组合配置** (134s) — Dynamic Sharpe 6.62 vs Static 6.37, 但K-Fold仅2/6胜出, **推荐维持静态配置**
+- 关键外部特征: Real Yield变化、VIX Zscore、DXY动量、信用压力、铜金比
+- 脚本: `experiments/run_r90_full.py` + `run_r90a~e_*.py`
+- 结果: `results/r90_external_data/`
+
+### R91 Warsh Regime Analysis — 已完成 (2026-05-02, 本地)
+
+- 沃什三情景Regime分类 + Taylor Rule偏差对比 + 政治化风险得分
+- Regime分布: A(渐进正常化)66%, B(激进紧缩)15%, C(政治化宽松)19%
+- **简单Taylor偏差与金价相关性+0.100, 优于市场基础偏差-0.043**
+- 黄金在Regime C(政治化宽松)表现最好: 年化+28.9%, Sharpe 1.45
+- TSMOM在非正常化Regime下爆发: B=17.18, C=11.01
+- 脚本: `experiments/run_r91_warsh_regime.py`
+- 结果: `results/r91_warsh_regime/`
 
 ### R69 P6 参数对账 — 已完成 (2026-05-01)
 
@@ -137,6 +171,10 @@
 | R51 | 独立策略全参数暴力搜索 | **120,240组合**: D1KC 50/50 KF, H4KC 50/50 KF, PSAR 50/50 KF, **SuperTrend否决(0正Sharpe)** | results/round51_results |
 | R52 | 多策略Lot组合优化 | **6,560组合+30 K-Fold全PASS**, 最优4策略组合Sharpe=5.18 KF_mean=5.75 | results/round52_results |
 | R69 | P6 参数对账 (R56 vs R61) | **P6的R56(EA)参数全面优于R61**: PSAR KF 5.59>5.21, SESS_BO KF 7.88>6.38, WF OOS均R56更优; **实盘无需更改** | results/r69_param_reconcile |
+| R88 | Per-Strategy Cap Grid | L8_MAX Cap=$35, PSAR=$5, TSMOM=NoCap, SESS_BO=$35; 实盘手数下最优Cap配置 | results/r88_cap_grid |
+| R89 | Lot Size Optimizer | $5k本金最优: L8=0.02, PSAR=0.09, TSMOM=0.08, SESS_BO=0.08; Portfolio Sharpe=6.37 | results/r89_lot_optimizer |
+| R90 | Full External Data Integration (5 Phase) | **Phase D ML Exit最有价值**: TSMOM AUC 0.781 Sharpe+49%; 方向预测无效; 动态配置验证不足; Rule-Based Regime最佳 | results/r90_external_data |
+| R91 | Warsh Regime Analysis | 沃什三情景+Taylor偏差; Regime C(政治化宽松)金价最强+28.9%; TSMOM在非常规Regime爆发(Sharpe 11-17) | results/r91_warsh_regime |
 
 ---
 
@@ -222,6 +260,14 @@
 50. **4策略Lot最优组合** (R52): L8(0.02)+D1KC(0.06)+H4KC(0.02)+PSAR(0.05)=Sharpe 5.18, KF_mean=5.75, PnL=$88K, MaxDD=$330, 30/30 K-Fold PASS
 51. **D1 KC是最大lot贡献者** (R52): 最优组合中D1 KC lot占比最高(0.06-0.10), 是组合收益的核心驱动力
 52. **P6组合R56参数已确认最优** (R69): PSAR SL=4.5/MH=20 KF mean 5.59 > R61的2.0/80 mean 5.21; SESS_BO LB=4/SL=4.5/TP=4.0 KF 7.88 > R61的3/3.0/6.0 KF 6.38; WF OOS同样R56更优; R61参数为full-sample过拟合, **P6实盘无需更改**
+53. **MaxLoss Cap逐策略最优** (R88): L8_MAX=$35, PSAR=$5(最敏感), TSMOM=NoCap, SESS_BO=$35; TSMOM不设Cap因为其趋势特性需要空间
+54. **$5k本金最优手数** (R89): L8=0.02, PSAR=0.09, TSMOM=0.08, SESS_BO=0.08; Portfolio Sharpe=6.37, MaxDD=$420
+55. **Rule-Based Regime最佳** (R90-A): ANOVA F=10.81(p=0.00002), OOS排序保留; KMeans/HMM均不如简单规则
+56. **因子过滤器绝大多数过拟合** (R90-B): 720种组合仅1个通过K-Fold(TSMOM+铜金比Q20), 因子过滤须极其谨慎
+57. **纯ML方向预测对黄金无效** (R90-C): 126特征, AUC≈0.53, 回测亏损; 黄金日频方向不可预测
+58. **ML Exit过滤是最有价值的外部数据应用** (R90-D): 所有策略过滤后Sharpe均提升; TSMOM+XGBoost AUC=0.781, Sharpe+49%(6.99→10.43)
+59. **动态Regime配置验证不足** (R90-E): Sharpe略高(+0.25)但K-Fold仅2/6胜出, 维持静态配置
+60. **沃什Regime C(政治化宽松)最利好黄金** (R91): 年化+28.9%, Sharpe 1.45; TSMOM在非常规Regime爆发(B=17.18, C=11.01); 简单Taylor偏差与金价相关性+0.10优于市场基础偏差
 
 ### 已否决方向汇总
 - PA形态 (R11): Pinbar/Fractal/InsideBar/Engulfing 全部 K-Fold 0/6
@@ -242,6 +288,16 @@
 - Tick 微观结构 (R34): 大跳无方向偏差, spread spikes集中在亚洲盘(23:00), 无可用信号
 - L8 全参数暴力替代 (R50): 48,300组合(Mult0.8-1.6/SL2.0-3.5/各种叠加), K-Fold 0/50通过, Fold3全面崩溃, M0.8等替代参数时间不稳定
 - SuperTrend H1黄金 (R51): 8,640组合全部Sharpe≤0, 在H1黄金上完全不可用
+
+---
+
+## 学习笔记
+
+- **文献学习笔记**: 详见 `docs/memory-bank/literature_notes.md`
+  - 石川博士「川流不息」专栏 (218+ 篇): PBO/CSCV、凯利公式、趋势跟踪、时间序列分析、布朗运动/BS公式
+  - Clever Liu「量化交易系列」(7 篇): 三大策略/风险管理/多因子/认知陷阱/散户生存/策略公开悖论
+  - Clever Liu TradingView 236 策略回测验证: 低频策略优势
+  - Clever Liu Agentic AI 因子挖掘: 统计弹性概念
 
 ---
 

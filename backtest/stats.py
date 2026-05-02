@@ -488,3 +488,72 @@ def compute_pbo(
         "logit_distribution": logit_distribution,
         "overfit_risk": risk,
     }
+
+
+# ═══════════════════════════════════════════════════════════════
+# R87-A: Risk Metrics (VaR / CVaR / Ulcer Index)
+# ═══════════════════════════════════════════════════════════════
+
+def compute_risk_metrics(daily_pnl: List[float]) -> Dict:
+    """Comprehensive tail-risk metrics from daily PnL series.
+
+    Returns VaR, CVaR (Expected Shortfall), worst rolling windows,
+    max consecutive loss days, and Ulcer Index.
+    """
+    arr = np.asarray(daily_pnl, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    n = len(arr)
+
+    empty = {
+        "var_95": 0.0, "var_99": 0.0,
+        "cvar_95": 0.0, "cvar_99": 0.0,
+        "worst_1d": 0.0, "worst_5d": 0.0,
+        "worst_10d": 0.0, "worst_20d": 0.0,
+        "max_consec_loss_days": 0,
+        "ulcer_index": 0.0,
+        "n_days": 0,
+    }
+    if n < 5:
+        return empty
+
+    var_95 = float(np.percentile(arr, 5))
+    var_99 = float(np.percentile(arr, 1))
+
+    tail_95 = arr[arr <= var_95]
+    tail_99 = arr[arr <= var_99]
+    cvar_95 = float(tail_95.mean()) if len(tail_95) > 0 else var_95
+    cvar_99 = float(tail_99.mean()) if len(tail_99) > 0 else var_99
+
+    worst_1d = float(arr.min())
+    s = pd.Series(arr)
+    worst_5d = float(s.rolling(5).sum().min()) if n >= 5 else worst_1d
+    worst_10d = float(s.rolling(10).sum().min()) if n >= 10 else worst_5d
+    worst_20d = float(s.rolling(20).sum().min()) if n >= 20 else worst_10d
+
+    max_consec = 0
+    streak = 0
+    for v in arr:
+        if v < 0:
+            streak += 1
+            max_consec = max(max_consec, streak)
+        else:
+            streak = 0
+
+    eq = np.cumsum(arr)
+    peak = np.maximum.accumulate(eq)
+    dd_pct = np.where(peak > 0, (peak - eq) / peak * 100, 0.0)
+    ulcer = float(np.sqrt(np.mean(dd_pct ** 2)))
+
+    return {
+        "var_95": round(var_95, 2),
+        "var_99": round(var_99, 2),
+        "cvar_95": round(cvar_95, 2),
+        "cvar_99": round(cvar_99, 2),
+        "worst_1d": round(worst_1d, 2),
+        "worst_5d": round(worst_5d, 2),
+        "worst_10d": round(worst_10d, 2),
+        "worst_20d": round(worst_20d, 2),
+        "max_consec_loss_days": max_consec,
+        "ulcer_index": round(ulcer, 4),
+        "n_days": n,
+    }
