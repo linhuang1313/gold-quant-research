@@ -246,32 +246,36 @@ def bt_tsmom(h1_df, spread, lot, maxloss_cap=0,
              fast=480, slow=720, sl_atr=4.5, tp_atr=6.0,
              trail_act=0.14, trail_dist=0.025, max_hold=20):
     df = h1_df.copy(); df['ATR'] = compute_atr(df)
-    df['fma'] = df['Close'].rolling(fast).mean()
-    df['sma'] = df['Close'].rolling(slow).mean()
-    df = df.dropna(subset=['ATR', 'fma', 'sma'])
+    df = df.dropna(subset=['ATR'])
     c = df['Close'].values; h = df['High'].values; lo = df['Low'].values
-    atr = df['ATR'].values; fm = df['fma'].values; sm = df['sma'].values
-    times = df.index; n = len(df)
+    atr = df['ATR'].values; times = df.index; n = len(df)
+    max_lb = max(fast, slow)
+    score = np.full(n, np.nan)
+    for i in range(max_lb, n):
+        s = 0.0
+        if c[i-fast] > 0: s += 0.5 * np.sign(c[i]/c[i-fast] - 1.0)
+        if c[i-slow] > 0: s += 0.5 * np.sign(c[i]/c[i-slow] - 1.0)
+        score[i] = s
     trades = []; pos = None; last_exit = -999
-    for i in range(1, n):
+    for i in range(max_lb+1, n):
         if pos is not None:
             result = _run_exit_with_cap(pos, i, h[i], lo[i], c[i], spread, lot, PV, times,
                                         sl_atr, tp_atr, trail_act, trail_dist, max_hold, maxloss_cap)
             if result:
                 trades.append(result); pos = None; last_exit = i; continue
-            # Reversal exit (TSMOM-specific)
-            if pos['dir'] == 'BUY' and fm[i] < sm[i]:
+            if pos['dir'] == 'BUY' and score[i] < 0:
                 pnl = (c[i]-pos['entry']-spread)*lot*PV
                 trades.append(_mk(pos, c[i], times[i], "Reversal", i, pnl)); pos = None; last_exit = i; continue
-            elif pos['dir'] == 'SELL' and fm[i] > sm[i]:
+            elif pos['dir'] == 'SELL' and score[i] > 0:
                 pnl = (pos['entry']-c[i]-spread)*lot*PV
                 trades.append(_mk(pos, c[i], times[i], "Reversal", i, pnl)); pos = None; last_exit = i; continue
             continue
         if i-last_exit < 2: continue
         if np.isnan(atr[i]) or atr[i] < 0.1: continue
-        if fm[i] > sm[i] and fm[i-1] <= sm[i-1]:
+        if np.isnan(score[i]) or np.isnan(score[i-1]): continue
+        if score[i] > 0 and score[i-1] <= 0:
             pos = {'dir': 'BUY', 'entry': c[i]+spread/2, 'bar': i, 'time': times[i], 'atr': atr[i]}
-        elif fm[i] < sm[i] and fm[i-1] >= sm[i-1]:
+        elif score[i] < 0 and score[i-1] >= 0:
             pos = {'dir': 'SELL', 'entry': c[i]-spread/2, 'bar': i, 'time': times[i], 'atr': atr[i]}
     return trades
 

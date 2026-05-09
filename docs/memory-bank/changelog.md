@@ -5,6 +5,64 @@
 
 ---
 
+## 2026-05-09
+
+- **R184 Keltner Entry Filter Impact on R:R**: `experiments/run_r184_keltner_filters.py`. 全面测试入场过滤器对Keltner交易质量的影响:
+  - Phase 1 Grid Scan: 6类过滤器共30+配置测试
+    - ADX阈值(0-25): 影响极小, ADX14 Sharpe=5.015 vs ADX0 5.051, ADX25 4.653
+    - Session: NY最强Sharpe=5.267(WR 82.7%), Asia最弱3.917, London+NY综合4.692
+    - **KCBW带宽扩张**: Sharpe从5.015→5.850(+16.6%), WR从71.8%→80.4%, 交易减少39%
+    - EMA: EMA200 Sharpe=5.380略好于EMA100=5.015, 但无EMA=5.107也不差
+    - KC乘数: KC2.5 Sharpe=5.293 R=1.449(最高R:R), 但交易仅3898笔
+    - 组合: ADX18+London+KCBW最高Sharpe=5.878但N=2226太少
+  - Phase 2 Robustness: Top 5 候选 vs 基线 (6-Fold CV + 1000x MC)
+    - **KCBW_ON**: K-Fold 5/6 PASS, MC 100% CI[+0.43,+1.75] PASS → **GO**
+    - ADX14_KCBW / ADX18_KCBW: 同样PASS (实质等同KCBW_ON)
+    - ADX18_London_KCBW: K-Fold 4/6 PASS, MC PASS → GO (但N=2226偏少)
+    - EMA_200: K-Fold 2/6 FAIL, MC 67.3% FAIL → **NO-GO**
+  - **核心结论**: KCBW过滤器是唯一稳健通过的改进, 值得部署到实盘
+  - 部署: `deploy/deploy_r184.py`, 服务器18s完成
+
+- **MT4 Log Excel审计**: 分析`log.xlsx`与系统`gold_trade_log.json`交叉验证:
+  - Excel 5月数据52笔中47笔(90%)盈亏计算正确, 5笔有误(Row 145平仓价错误, 4笔小偏差)
+  - 系统log实盘R:R: Keltner 0.468(102笔), M15_RSI 0.831(19笔), DT 1.231(9笔)
+  - Keltner出场分布: Trail 78%, Timeout 8%, MaxLoss Cap 8%, KC中轨 6%
+  - 实盘vs回测R:R差异(0.468 vs 1.121)主因: 102笔小样本+2026高波动期
+
+- **R183 Keltner R:R Optimization**: `experiments/run_r183_keltner_rr.py`. 4-phase experiment addressing Keltner's R:R imbalance (SL=3.5xATR vs trailing captures 0.06-0.14xATR):
+  - Phase 1 Grid: 收紧SL无效(SL 1.5->3.5 Sharpe单调递增), 放宽trailing激活严重降Sharpe(0.5xATR Act Sharpe 2.76), 放宽trail距离也降Sharpe, 延长MH小幅提Sharpe但恶化R:R
+  - Phase 2 Top: MH8 Sharpe 5.277 > baseline 5.015, 但 R从1.121降到0.539
+  - Phase 3 Robustness: MH8 K-Fold 5/6 PASS, MC P=80.2% MARGINAL(CI含0) -> CAUTION
+  - Phase 4 Anatomy: Baseline R=1.121(avg_win=$6.79/avg_loss=$6.05), safety margin=24.7pp; MH8 R=0.539, safety margin=19.4pp
+  - **核心发现**: 当前MH2配置实际上R:R=1.12(不是0.12)，24.7pp安全边际，是所有配置中最佳平衡
+  - 部署: `deploy/deploy_r183.py`, 服务器17s完成
+
+- **R182 Robustness Validation**: `experiments/run_r182_robustness.py`. 6-Fold CV + 1000x Monte Carlo Bootstrap + 6-strategy portfolio interaction for R181 proposed changes:
+  - **Keltner MH2->MH5**: K-Fold 2/6 FAIL, MC P=87.4% CI含0 MARGINAL -> **NO-GO** (全样本好看但折叠不稳定)
+  - **Chandelier ATR14->22**: K-Fold 3/6 FAIL, MC P=62.4% FAIL -> **NO-GO** (折叠方差大，优势不显著)
+  - **Dual Thrust current-bar vs confirmed-bar**: K-Fold 5/6 PASS, MC P=98.4% CI[+0.09,+2.07] PASS -> **GO** (但实盘 confirmed-bar 出于执行安全保留)
+  - Portfolio 组合测试: 4/4 eras PASS (Sharpe 6.967 vs 6.863)
+  - 结论: 当前实盘配置已是最优平衡点，不建议改动
+  - 部署: `deploy/deploy_r182.py`, 服务器21s完成
+
+- **R181 Full Live Strategy Audit**: `experiments/run_r181_full_audit.py`. Comprehensive A/B test of all 6 live strategies comparing research baseline vs live config vs live+filters across 4 eras. 20 individual test configs + 3 portfolio variants. Key findings:
+  - **Chandelier RSI>EMA100**: Sharpe 5.015 vs 3.869 (+1.146), confirms R176e/f RSI filter is superior
+  - **PSAR skip hours**: Sharpe 7.075 vs 6.480 (+0.595), live {3,7,22} skip validated
+  - **PSAR live params**: Sharpe 6.480 vs 4.913 (+1.567), new SL/TP/MH vastly better than old
+  - **SESS_BO D1 EMA20**: Sharpe 6.905 vs 6.447 (+0.458), filter validated (halves trades, higher Sharpe)
+  - **TSMOM live params**: Sharpe 6.933 vs 6.613 (+0.320), new params validated
+  - **Keltner Session ADX**: Negligible impact (Sharpe +0.001), R178 has no measurable effect in backtest
+  - **Keltner MH5>MH2**: Sharpe 5.239 vs 5.015 (+0.224), consider increasing from 2 to 5
+  - **DT confirmed_bar**: Sharpe 4.510 vs 4.883 (-0.373), live crossover logic slightly worse
+  - **Chandelier ATR14>ATR22**: Sharpe 4.328 vs 3.869 (+0.459), ATR14 for lines is better
+  - Portfolio C (live+filters): Sharpe 6.863 vs A (research baseline) 6.403 (+0.460)
+  - 部署: `deploy/deploy_r181.py`, 服务器34s完成
+  - 结果: `results/r181_full_audit/`
+
+## 2026-05-05
+
+- **Cross-Asset Z-Score 回测 (完整三阶段)**: `gold-quant-trading/scripts/cross_asset_zscore_backtest.py`. 2y 1h Gold/Brent/US10Y, 24h 滚动 Z-Score. Phase 1: 7 种 Z 前瞻收益统计. Phase 2: 14 种信号带成本做多模拟. Phase 3: 5 种 KC+Z 仓位调节方案. **全面否决**: 纯 KC Sharpe=1.28 是最优, 所有 Z 变体均不超越. Z-Score 定位为 Dashboard 宏观参考. 详见 backtestArchive.md + constraints.md
+
 ## 2026-05-02
 
 - **R90 Full External Data Integration — 服务器5 Phase全部完成**:

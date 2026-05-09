@@ -1,27 +1,27 @@
+"""Check server state: data files, packages, disk space."""
 import paramiko
 
-ssh = paramiko.SSHClient()
-ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh.connect('connect.bjb1.seetacloud.com', port=45411, username='root', password='5zQ8khQzttDN', timeout=30)
+SERVER = 'connect.westd.seetacloud.com'
+PORT = 41109
+USER = 'root'
+PASSWD = '3sCdENtzYfse'
+REMOTE_BASE = '/root/gold-quant-research'
+
+c = paramiko.SSHClient()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+c.connect(SERVER, port=PORT, username=USER, password=PASSWD, timeout=30, banner_timeout=30)
 
 cmds = [
-    'which conda 2>&1',
-    'ls /root/miniconda3/bin/python* 2>&1',
-    'ls /usr/bin/python* /usr/local/bin/python* 2>&1',
-    '/root/miniconda3/bin/python --version 2>&1',
-    '/root/miniconda3/bin/pip list 2>/dev/null | grep -iE "numpy|pandas" 2>&1',
-    'cat /etc/os-release | head -3 2>&1',
-    'ls -la /root/research/*.csv 2>&1',
-    'wc -l /root/research/*.csv 2>&1',
+    ('Data files', f'ls -la {REMOTE_BASE}/data/download/ 2>/dev/null | head -10'),
+    ('Macro data', f'ls -la {REMOTE_BASE}/data/external/ 2>/dev/null'),
+    ('Packages', 'pip list 2>/dev/null | grep -iE "xgboost|torch|scikit|scipy|hmmlearn"'),
+    ('Disk', 'df -h /'),
+    ('Experiments', f'ls {REMOTE_BASE}/experiments/run_r13*.py {REMOTE_BASE}/experiments/run_r14*.py 2>/dev/null'),
 ]
 
-for c in cmds:
-    print(f'>>> {c}')
-    _, o, e = ssh.exec_command(c, timeout=30)
-    out = o.read().decode(errors='replace').strip()
-    err = e.read().decode(errors='replace').strip()
-    if out: print(out)
-    if err: print(f'[ERR] {err}')
-    print()
+for label, cmd in cmds:
+    print(f"\n=== {label} ===")
+    _, out, err = c.exec_command(cmd, timeout=15)
+    print(out.read().decode().strip())
 
-ssh.close()
+c.close()

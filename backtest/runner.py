@@ -25,6 +25,8 @@ from backtest.stats import calc_stats
 # ═══════════════════════════════════════════════════════════════
 
 _M15_CANDIDATES = [
+    Path("data/download/xauusd-m15-bid-2015-01-01-2026-05-06.csv"),
+    Path("data/download/xauusd-m15-bid-2015-01-01-2026-05-05.csv"),
     Path("data/download/xauusd-m15-bid-2015-01-01-2026-04-27.csv"),
     Path("data/download/xauusd-m15-bid-2015-01-01-2026-04-10.csv"),
     Path("data/download/xauusd-m15-bid-2015-01-01-2026-03-25.csv"),
@@ -32,6 +34,8 @@ _M15_CANDIDATES = [
 M15_CSV_PATH = next((p for p in _M15_CANDIDATES if p.exists()), _M15_CANDIDATES[0])
 
 _H1_CANDIDATES = [
+    Path("data/download/xauusd-h1-bid-2015-01-01-2026-05-06.csv"),
+    Path("data/download/xauusd-h1-bid-2015-01-01-2026-05-05.csv"),
     Path("data/download/xauusd-h1-bid-2015-01-01-2026-04-27.csv"),
     Path("data/download/xauusd-h1-bid-2015-01-01-2026-04-10.csv"),
     Path("data/download/xauusd-h1-bid-2015-01-01-2026-03-25.csv"),

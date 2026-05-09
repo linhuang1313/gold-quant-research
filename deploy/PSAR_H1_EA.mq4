@@ -1,40 +1,48 @@
 //+------------------------------------------------------------------+
 //| PSAR_H1_EA.mq4                                                  |
 //| Parabolic SAR H1 Direction Flip                                  |
-//| R51: 6,000 combos, K-Fold 50/50 PASS, Sharpe 4.13              |
+//| R127: 168-config grid, Standalone Sharpe 6.905                   |
+//| R144: +Rule B extreme protection, Portfolio Sharpe 7.55          |
 //| Chart: XAUUSD H1                                                |
 //+------------------------------------------------------------------+
-//| Best params from R51 brute-force:                                |
+//| Exit params from R127 grid search (R131 deep validated):         |
 //|   PSAR: AF_Start=0.01, AF_Max=0.05                              |
-//|   Exit: SL=4.5xATR, TP=16.0xATR, MaxHold=20 bars               |
-//|   Trail: Act=0.20xATR, Dist=0.04xATR                            |
-//| R52 recommended lot: 0.05                                        |
+//|   Exit: SL=4.0xATR, TP=6.0xATR, MaxHold=15 bars                |
+//|   Trail: Act=0.08xATR, Dist=0.015xATR                           |
+//| Rule B: R144 validated, skip 8 bars after 3-sigma ATR spike      |
+//| R56 recommended lot: 0.03                                        |
 //+------------------------------------------------------------------+
 #property copyright "Gold Quant Research"
-#property version   "1.01"
+#property version   "2.00"
 #property strict
 
 #include "TradeLogger.mqh"
 
-//--- 交易参数
-extern double LotSize          = 0.03;       // R56 最优组合推荐
+//--- Trading params
+extern double LotSize          = 0.03;
 extern int    MagicNumber      = 20250432;
 extern int    MaxSlippage       = 30;
 
-//--- PSAR 参数 (H1 timeframe)
-extern double PSAR_AF_Start     = 0.01;      // R51 最优
-extern double PSAR_AF_Max       = 0.05;      // R51 最优
+//--- PSAR indicator (H1)
+extern double PSAR_AF_Start     = 0.01;
+extern double PSAR_AF_Max       = 0.05;
 extern int    ATR_Period        = 14;
 
-//--- 出场参数
-extern double SL_ATR_Mult       = 4.5;       // R51 最优
-extern double TP_ATR_Mult       = 16.0;      // R51 最优
-extern int    MaxHold_Bars      = 20;        // H1 bars
-extern double Trail_Act_ATR     = 0.20;      // R51 最优
-extern double Trail_Dist_ATR    = 0.04;      // R51 最优
+//--- Exit params (R127 optimized, R131 deep validated)
+extern double SL_ATR_Mult       = 4.0;
+extern double TP_ATR_Mult       = 6.0;
+extern int    MaxHold_Bars      = 15;
+extern double Trail_Act_ATR     = 0.08;
+extern double Trail_Dist_ATR    = 0.015;
 
-//--- 入场间隔 (H1 bar 间隔 ≥ 2, 对应回测 last_exit gap)
+//--- Entry gap
 extern double MinEntryGapHours  = 2.0;
+
+//--- Rule B extreme protection (R144: Sharpe +0.42)
+extern bool   RuleB_Enabled     = true;
+extern double RuleB_ATR_Sigma   = 3.0;
+extern int    RuleB_ATR_Lookback = 60;
+extern int    RuleB_SkipBars    = 8;
 
 //--- Global
 datetime lastEntryTime  = 0;
@@ -44,15 +52,37 @@ double   entryATR       = 0;
 double   trailStopPrice = 0;
 double   extremePrice   = 0;
 int      myTicket       = -1;
-int      prevPSARDir    = 0;     // 1=bullish, -1=bearish, 0=unknown
+int      prevPSARDir    = 0;
+int      ruleB_skipCount    = 0;
+datetime ruleB_lastCheckBar = 0;
+
+//+------------------------------------------------------------------+
+bool IsExtremeMarket()
+{
+   if(!RuleB_Enabled) return false;
+   double sum = 0, sum2 = 0;
+   for(int i = 0; i < RuleB_ATR_Lookback; i++)
+   {
+      double v = iATR(Symbol(), PERIOD_H1, 14, i + 1);
+      sum += v;
+      sum2 += v * v;
+   }
+   double mean = sum / RuleB_ATR_Lookback;
+   double var  = sum2 / RuleB_ATR_Lookback - mean * mean;
+   double std  = MathSqrt(MathMax(var, 0.000001));
+   double cur  = iATR(Symbol(), PERIOD_H1, 14, 0);
+   return (cur > mean + RuleB_ATR_Sigma * std);
+}
 
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("PSAR_H1 EA v1.0 | Lot=", LotSize,
+   Print("PSAR_H1 EA v2.0 | Lot=", LotSize,
          " AF=", PSAR_AF_Start, "/", PSAR_AF_Max,
          " SL=", SL_ATR_Mult, " TP=", TP_ATR_Mult,
-         " MH=", MaxHold_Bars, " Trail=", Trail_Act_ATR, "/", Trail_Dist_ATR);
+         " MH=", MaxHold_Bars, " Trail=", Trail_Act_ATR, "/", Trail_Dist_ATR,
+         " RuleB=", RuleB_Enabled, " Sigma=", RuleB_ATR_Sigma,
+         " Skip=", RuleB_SkipBars);
 
    double sar_prev = iSAR(Symbol(), PERIOD_H1, PSAR_AF_Start, PSAR_AF_Max, 2);
    double close_prev = iClose(Symbol(), PERIOD_H1, 2);
@@ -78,8 +108,8 @@ int CheckPSARSignal()
    double atr = iATR(Symbol(), PERIOD_H1, ATR_Period, 1);
    if(atr < 0.1) return 0;
 
-   if(prevDir == -1 && curDir == 1)  return 1;   // flip to bullish
-   if(prevDir == 1  && curDir == -1) return -1;   // flip to bearish
+   if(prevDir == -1 && curDir == 1)  return 1;
+   if(prevDir == 1  && curDir == -1) return -1;
    return 0;
 }
 
@@ -192,11 +222,29 @@ void OnTick()
    }
    lastBarTime = currentBar;
 
+   // Rule B: check extreme market each new H1 bar
+   if(RuleB_Enabled && currentBar != ruleB_lastCheckBar)
+   {
+      ruleB_lastCheckBar = currentBar;
+      if(IsExtremeMarket())
+      {
+         ruleB_skipCount = RuleB_SkipBars;
+         Print("Rule B: ATR spike detected, skipping ", RuleB_SkipBars, " bars");
+      }
+      else if(ruleB_skipCount > 0)
+      {
+         ruleB_skipCount--;
+      }
+   }
+
    if(HasOpenPosition())
    {
       ManagePosition();
       return;
    }
+
+   // Rule B: skip entry during cooldown
+   if(ruleB_skipCount > 0) return;
 
    if(TimeCurrent() - lastEntryTime < (int)(MinEntryGapHours * 3600))
       return;

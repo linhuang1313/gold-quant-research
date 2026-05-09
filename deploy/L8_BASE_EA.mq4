@@ -2,50 +2,49 @@
 //| L8_BASE_EA.mq4                                                   |
 //| L8_BASE + Cap80                                                   |
 //| R41 K-Fold 6/6 PASS (CorrSh Mean=6.27, Min=1.14)                |
+//| R144: +Rule B extreme protection, Sharpe +0.38                   |
 //| Chart: XAUUSD M15                                                |
 //+------------------------------------------------------------------+
-//| L8_BASE vs L7 差异:                                               |
-//|   ADX: 18 -> 14 (更多信号)                                        |
-//|   Normal Trail: 0.28/0.06 -> 0.14/0.025 (更紧锁利)               |
-//|   High Trail: 0.12/0.02 -> 0.06/0.008 (高波动更紧)               |
-//|   TATrail: ON -> OFF (不用时间衰减)                                |
-//|   MaxHold: 8 -> 20 (给趋势更多空间)                                |
+//| L8_BASE vs L7:                                                    |
+//|   ADX: 18 -> 14, Normal Trail: 0.14/0.025, High: 0.06/0.008    |
+//|   TATrail: OFF, MaxHold: 20                                       |
+//| Rule B: R144 validated, skip 8 H1 bars after 3-sigma ATR spike   |
 //+------------------------------------------------------------------+
 #property copyright "Gold Quant Research"
-#property version   "3.00"
+#property version   "3.10"
 #property strict
 
-//--- 交易参数
-extern double LotSize          = 0.01;       // R56 最优组合推荐
+//--- Trading params
+extern double LotSize          = 0.01;
 extern int    MagicNumber      = 20250427;
 extern int    MaxSlippage       = 30;
 
-//--- Keltner 入场参数
+//--- Keltner entry
 extern int    KC_EMA_Period     = 25;
 extern double KC_Multiplier     = 1.2;
 extern int    ATR_Period        = 14;
 extern int    ADX_Period        = 14;
-extern double ADX_Threshold     = 14.0;     // L8: 14 (L7 was 18)
+extern double ADX_Threshold     = 14.0;
 extern int    EMA100_Period     = 100;
 
-//--- 出场参数
+//--- Exit params
 extern double SL_ATR_Mult       = 3.5;
 extern double TP_ATR_Mult       = 8.0;
-extern int    MaxHold_Bars      = 20;        // L8: 20 (L7 was 8)
-extern double Trail_Act_ATR     = 0.14;      // L8: 0.14 (L7 was 0.28)
-extern double Trail_Dist_ATR    = 0.025;     // L8: 0.025 (L7 was 0.06)
+extern int    MaxHold_Bars      = 20;
+extern double Trail_Act_ATR     = 0.14;
+extern double Trail_Dist_ATR    = 0.025;
 
 //--- Regime Trail
-extern double Regime_Low_Act    = 0.22;      // L8
-extern double Regime_Low_Dist   = 0.04;      // L8
-extern double Regime_Norm_Act   = 0.14;      // L8
-extern double Regime_Norm_Dist  = 0.025;     // L8
-extern double Regime_High_Act   = 0.06;      // L8
-extern double Regime_High_Dist  = 0.008;     // L8
+extern double Regime_Low_Act    = 0.22;
+extern double Regime_Low_Dist   = 0.04;
+extern double Regime_Norm_Act   = 0.14;
+extern double Regime_Norm_Dist  = 0.025;
+extern double Regime_High_Act   = 0.06;
+extern double Regime_High_Dist  = 0.008;
 
 //--- H1 KC Filter
 extern bool   H1_Filter_Enabled = true;
-extern int    H1_KC_EMA_Period  = 15;        // R49 最优 (原20)
+extern int    H1_KC_EMA_Period  = 15;
 extern double H1_KC_Multiplier  = 2.0;
 extern int    H1_ATR_Period     = 14;
 
@@ -55,23 +54,29 @@ extern int    EqCurve_LB        = 10;
 extern double EqCurve_Cut       = 0.0;
 extern double EqCurve_Red       = 0.0;
 
-//--- 入场间隔
+//--- Entry gap
 extern double MinEntryGapHours  = 1.0;
 
 //--- Choppy
 extern double ChoppyThreshold   = 0.50;
 
 //=== EXECUTION EDGE ===
-extern bool   KCBW_Enabled      = false;     // 实盘 OFF
+extern bool   KCBW_Enabled      = false;
 extern int    KCBW_Lookback     = 5;
 extern double KCBW_Min_Ratio    = 0.0;
 
 extern bool   MaxLoss_Enabled   = true;
-extern double MaxLoss_USD       = 30.0;      // R49 K-Fold 6/6, Cap$30 最优
+extern double MaxLoss_USD       = 30.0;
 
 extern bool   Session_Filter    = false;
 extern int    Session_Skip_Start = 2;
 extern int    Session_Skip_End   = 5;
+
+//--- Rule B extreme protection (R144: Sharpe +0.38)
+extern bool   RuleB_Enabled     = true;
+extern double RuleB_ATR_Sigma   = 3.0;
+extern int    RuleB_ATR_Lookback = 60;
+extern int    RuleB_SkipBars    = 8;
 
 //--- Global
 datetime lastEntryTime  = 0;
@@ -90,6 +95,27 @@ double   atrHistory[];
 int      atrHistCount   = 0;
 int      ATR_HIST_SIZE  = 50;
 
+int      ruleB_skipCount    = 0;
+datetime ruleB_lastCheckBar = 0;
+
+//+------------------------------------------------------------------+
+bool IsExtremeMarket()
+{
+   if(!RuleB_Enabled) return false;
+   double sum = 0, sum2 = 0;
+   for(int i = 0; i < RuleB_ATR_Lookback; i++)
+   {
+      double v = iATR(Symbol(), PERIOD_H1, 14, i + 1);
+      sum += v;
+      sum2 += v * v;
+   }
+   double mean = sum / RuleB_ATR_Lookback;
+   double var  = sum2 / RuleB_ATR_Lookback - mean * mean;
+   double std  = MathSqrt(MathMax(var, 0.000001));
+   double cur  = iATR(Symbol(), PERIOD_H1, 14, 0);
+   return (cur > mean + RuleB_ATR_Sigma * std);
+}
+
 //+------------------------------------------------------------------+
 int OnInit()
 {
@@ -98,10 +124,12 @@ int OnInit()
    ArrayResize(atrHistory, ATR_HIST_SIZE);
    ArrayInitialize(atrHistory, 0);
 
-   Print("L8_BASE EA v3.0 | Lot=", LotSize,
+   Print("L8_BASE EA v3.10 | Lot=", LotSize,
          " ADX=", ADX_Threshold, " MH=", MaxHold_Bars,
          " Trail=", Trail_Act_ATR, "/", Trail_Dist_ATR,
-         " KCBW=", KCBW_Enabled, " Cap=", MaxLoss_USD);
+         " KCBW=", KCBW_Enabled, " Cap=", MaxLoss_USD,
+         " RuleB=", RuleB_Enabled, " Sigma=", RuleB_ATR_Sigma,
+         " Skip=", RuleB_SkipBars);
    return INIT_SUCCEEDED;
 }
 
@@ -324,8 +352,6 @@ void ManagePosition()
    double trail_act, trail_dist;
    GetRegimeTrailParams(regime, trail_act, trail_dist);
 
-   // L8_BASE: NO TATrail (no time decay on trailing)
-
    double activateDist = trail_act * entryATR;
    double trailDist    = trail_dist * entryATR;
 
@@ -404,6 +430,22 @@ void OnTick()
    if(currentBar == lastBarTime) return;
    lastBarTime = currentBar;
 
+   // Rule B: check extreme market per H1 bar (not M15)
+   datetime currentH1 = iTime(Symbol(), PERIOD_H1, 0);
+   if(RuleB_Enabled && currentH1 != ruleB_lastCheckBar)
+   {
+      ruleB_lastCheckBar = currentH1;
+      if(IsExtremeMarket())
+      {
+         ruleB_skipCount = RuleB_SkipBars;
+         Print("Rule B: ATR spike detected, skipping ", RuleB_SkipBars, " H1 bars");
+      }
+      else if(ruleB_skipCount > 0)
+      {
+         ruleB_skipCount--;
+      }
+   }
+
    double h1_atr = iATR(Symbol(), PERIOD_H1, ATR_Period, 0);
    if(h1_atr > 0)
    {
@@ -416,6 +458,9 @@ void OnTick()
       ManagePosition();
       return;
    }
+
+   // Rule B: skip entry during cooldown
+   if(ruleB_skipCount > 0) return;
 
    if(TimeCurrent() - lastEntryTime < (int)(MinEntryGapHours * 3600))
       return;

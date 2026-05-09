@@ -1,52 +1,38 @@
-"""Download all completed experiment outputs from remote server."""
-import sys, io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-import paramiko
+"""Download completed results from remote server."""
+import paramiko, os, json, base64
 
-HOST = "connect.westc.seetacloud.com"
-PORT = 30886
-USER = "root"
-PASS = "r1zlTZQUb+E4"
-PROJECT = "/root/gold-quant-trading"
+SERVER = 'connect.westd.seetacloud.com'
+PORT = 41109
+USER = 'root'
+PASSWD = '3sCdENtzYfse'
+REMOTE_BASE = '/root/gold-quant-research'
+LOCAL_BASE = r'c:\Users\hlin2\gold-quant-research'
 
-FILES_TO_DOWNLOAD = [
-    "exp_batch_postfix_output.txt",
-    "exp_choppy_ablation_output.txt",
-    "exp_sl_sensitivity_output.txt",
-    "exp_spread_model_output.txt",
-    "exp_m_slippage_output.txt",
-    "exp_r_baseline_output.txt",
-    "exp_s_spread_output.txt",
-    "exp_t_donchian_output.txt",
-    "exp_u_kc_reentry_output.txt",
-    "exp_v_sizing_output.txt",
-    "exp_w_loss_profile_output.txt",
-    "exp_l_trend_weights_output.txt",
-]
+ALL = ['r132','r133','r134','r135','r136','r137','r138','r139','r140','r141','r142','r143']
 
-def main():
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(HOST, port=PORT, username=USER, password=PASS, timeout=15)
-    sftp = ssh.open_sftp()
-    
-    for f in FILES_TO_DOWNLOAD:
-        remote = f"{PROJECT}/{f}"
-        local = f
+c = paramiko.SSHClient()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+c.connect(SERVER, port=PORT, username=USER, password=PASSWD, timeout=60, banner_timeout=60)
+sftp = c.open_sftp()
+
+for tag in ALL:
+    remote_json = f"{REMOTE_BASE}/results/{tag}/{tag}_results.json"
+    local_dir = os.path.join(LOCAL_BASE, 'results', tag)
+    os.makedirs(local_dir, exist_ok=True)
+    local_json = os.path.join(local_dir, f"{tag}_results.json")
+
+    try:
+        sftp.stat(remote_json)
+        sftp.get(remote_json, local_json)
+        print(f"  {tag}: DOWNLOADED results")
+    except FileNotFoundError:
+        # Check if stdout exists (still running or crashed)
         try:
-            sftp.stat(remote)
-            sftp.get(remote, local)
-            import os
-            size = os.path.getsize(local)
-            print(f"  Downloaded {f} ({size//1024}KB)")
+            remote_stdout = f"{REMOTE_BASE}/results/{tag}/{tag}_stdout.txt"
+            sftp.stat(remote_stdout)
+            print(f"  {tag}: still running (no results yet)")
         except FileNotFoundError:
-            print(f"  SKIP {f} (not found)")
-        except Exception as e:
-            print(f"  ERROR {f}: {e}")
-    
-    sftp.close()
-    ssh.close()
-    print("\nDone!")
+            print(f"  {tag}: not started")
 
-if __name__ == "__main__":
-    main()
+sftp.close()
+c.close()

@@ -22,5 +22,14 @@ analyze*.py
 tmp_*.json
 tmp_*.txt
 
+# Node modules (dukascopy downloader)
+node_modules/
+package-lock.json
+
+# COT raw data files
+*.txt
+!requirements.txt
+!README.txt
+
 # Junction to gold-quant-trading (2026-04-23, Windows mklink /J)
 _live/

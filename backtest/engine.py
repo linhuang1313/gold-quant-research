@@ -140,6 +140,8 @@ class BacktestEngine:
         block_buy_ema_slope: int = 0,
         # Lot sizing
         atr_regime_lots: bool = False,
+        # R157: Session-based lot sizing — map UTC hour -> lot size
+        session_lot_map: Optional[Dict[int, float]] = None,
         # Transaction cost
         spread_cost: float = 0.0,
         spread_model: str = "fixed",        # "fixed" | "atr_scaled" | "session_aware" | "historical"
@@ -342,6 +344,7 @@ class BacktestEngine:
 
         # Lots
         self._atr_regime_lots = atr_regime_lots
+        self._session_lot_map = session_lot_map
 
         # Cost
         self._spread_cost = spread_cost
@@ -1833,6 +1836,12 @@ class BacktestEngine:
                     elif atr_pct < 0.30:
                         lots = round(lots * 0.7, 2)
                 lots = max(self._min_lot, min(self._max_lot, lots))
+
+            # R157: Session-based lot override
+            if self._session_lot_map is not None:
+                utc_hour = pd.Timestamp(bar_time).hour
+                if utc_hour in self._session_lot_map:
+                    lots = self._session_lot_map[utc_hour]
 
             entry_atr = bar_h1_atr
 

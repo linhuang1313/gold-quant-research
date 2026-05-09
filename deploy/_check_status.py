@@ -1,31 +1,22 @@
-"""Quick check if R24 is still running on remote."""
-import paramiko, time, sys
-sys.stdout.reconfigure(line_buffering=True)
+"""Quick status check for R119-R130."""
+import paramiko
+
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect('connect.westd.seetacloud.com', port=45630, username='root',
-          password='r1zlTZQUb+E4', timeout=60)
-c.get_transport().set_keepalive(5)
+c.connect('connect.westd.seetacloud.com', port=41109, username='root',
+          password='3sCdENtzYfse', timeout=120, banner_timeout=60, auth_timeout=60)
 
-def run(cmd, t=120):
-    tr = c.get_transport(); ch = tr.open_session(); ch.settimeout(t)
-    ch.exec_command(cmd)
-    out = b''
-    while True:
-        time.sleep(0.2)
-        if ch.recv_ready(): out += ch.recv(65536)
-        if ch.recv_stderr_ready(): out += ch.recv_stderr(65536)
-        if ch.exit_status_ready():
-            while ch.recv_ready(): out += ch.recv(65536)
-            while ch.recv_stderr_ready(): out += ch.recv_stderr(65536)
-            break
-    rc = ch.recv_exit_status(); ch.close()
-    return out.decode('utf-8', 'replace'), rc
+# Find all result files
+_, out, _ = c.exec_command(
+    'find /root/gold-quant-research/results -name "*_results.json" -newer /root/gold-quant-research/experiments/run_r119_ml_entry_v2.py '
+    '| sort',
+    timeout=30)
+print("=== Result JSON files ===")
+print(out.read().decode())
 
-out, _ = run("ps aux | grep run_round24 | grep -v grep")
-print(f"Process:\n{out}", flush=True)
-out, _ = run("wc -l /root/gold-quant-research/results/round24_results/stdout.txt")
-print(f"Lines: {out.strip()}", flush=True)
-out, _ = run("tail -20 /root/gold-quant-research/results/round24_results/stdout.txt")
-print(f"Last output:\n{out}", flush=True)
+# Check running processes
+_, out, _ = c.exec_command('ps aux | grep "run_r1[12]" | grep -v grep', timeout=15)
+print("=== Running experiments ===")
+print(out.read().decode())
+
 c.close()
