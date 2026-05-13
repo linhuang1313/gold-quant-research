@@ -144,10 +144,17 @@ class BacktestEngine:
         session_lot_map: Optional[Dict[int, float]] = None,
         # Transaction cost
         spread_cost: float = 0.0,
-        spread_model: str = "fixed",        # "fixed" | "atr_scaled" | "session_aware" | "historical"
+        spread_model: str = "fixed",        # "fixed" | "atr_scaled" | "session_aware" | "historical" | "realistic"
         spread_base: float = 0.30,          # base spread for dynamic models
         spread_max: float = 3.0,            # max spread cap
         spread_series: Optional[pd.Series] = None,  # historical spread indexed by timestamp(ms)
+        # Entry slippage model based on 91 real trades from live EA
+        # "none" = no slippage (default), "fixed" = fixed per-direction,
+        # "empirical" = sample from real distribution, "realistic" = fixed mean values
+        slippage_model: str = "none",
+        slippage_buy: float = 0.67,         # mean BUY entry slippage from live data ($)
+        slippage_sell: float = 0.17,         # mean SELL entry slippage from live data ($)
+        slippage_seed: int = 42,             # RNG seed for empirical sampling
         # Macro regime (P4)
         macro_df: Optional[pd.DataFrame] = None,
         macro_regime_enabled: bool = False,
@@ -352,6 +359,30 @@ class BacktestEngine:
         self._spread_base = spread_base
         self._spread_max = spread_max
         self._spread_series = spread_series
+
+        # Entry slippage (from 91 real EA trades)
+        self._slippage_model = slippage_model
+        self._slippage_buy = slippage_buy
+        self._slippage_sell = slippage_sell
+        self._slippage_rng = np.random.RandomState(slippage_seed)
+        # Empirical distributions from live trading (sorted, for resampling)
+        self._empirical_buy_slips = np.array([
+            -3.43, -1.29, -1.17, -0.82, -0.59, -0.53, -0.28, -0.22,
+            0.18, 0.19, 0.23, 0.24, 0.26, 0.26, 0.29, 0.30, 0.32, 0.34,
+            0.35, 0.41, 0.41, 0.49, 0.51, 0.61, 0.62, 0.62, 0.64, 0.64,
+            0.67, 0.69, 0.73, 0.81, 0.82, 0.83, 0.87, 0.87, 0.87, 1.08,
+            1.08, 1.12, 1.20, 1.23, 1.33, 1.86, 1.91, 2.26, 2.97, 3.02,
+            3.20, 4.33,
+        ])
+        self._empirical_sell_slips = np.array([
+            -2.59, -2.04, -1.61, -0.97, -0.78, -0.63, -0.61, -0.60,
+            -0.51, -0.25, -0.24, -0.06, -0.05, -0.05, -0.04, -0.04, -0.04,
+            0.00, 0.00, 0.17, 0.19, 0.26, 0.28, 0.28, 0.32, 0.40, 0.43,
+            0.46, 0.47, 0.53, 0.58, 0.61, 0.82, 0.91, 0.97, 0.99, 1.04,
+            1.10, 1.55, 2.33, 3.19,
+        ])
+        self.total_entry_slippage = 0.0
+        self.slippage_count = 0
 
         # Macro regime
         self._macro_df = macro_df
@@ -1752,6 +1783,17 @@ class BacktestEngine:
             strategy = sig['strategy']
             direction = sig['signal']
             entry_price = entry_price_override if entry_price_override > 0 else sig['close']
+
+            # Apply realistic entry slippage (worsens entry for trader)
+            slip = self._calc_entry_slippage(direction)
+            if slip != 0.0:
+                if direction == 'BUY':
+                    entry_price += slip
+                else:
+                    entry_price -= slip
+                self.total_entry_slippage += abs(slip)
+                self.slippage_count += 1
+
             sl = sig.get('sl', config.STOP_LOSS_PIPS)
             tp = sig.get('tp', 0)
 
@@ -1865,6 +1907,33 @@ class BacktestEngine:
         if entered and self._min_entry_gap_hours > 0:
             self._last_entry_time = pd.Timestamp(bar_time)
 
+    # ── Entry slippage ─────────────────────────────────────────
+
+    def _calc_entry_slippage(self, direction: str) -> float:
+        """Return entry slippage in price units (positive = worse for trader).
+
+        Models calibrated from 91 real EA trades (2026-04 to 2026-05):
+          BUY  mean +$0.67, SELL mean +$0.17 (direction-asymmetric).
+        """
+        if self._slippage_model == "none":
+            return 0.0
+
+        if self._slippage_model == "fixed":
+            return self._slippage_buy if direction == 'BUY' else self._slippage_sell
+
+        if self._slippage_model == "empirical":
+            pool = self._empirical_buy_slips if direction == 'BUY' else self._empirical_sell_slips
+            return float(self._slippage_rng.choice(pool))
+
+        if self._slippage_model == "realistic":
+            # Lognormal-ish: sample from empirical with 50% chance, else use mean
+            if self._slippage_rng.rand() < 0.5:
+                pool = self._empirical_buy_slips if direction == 'BUY' else self._empirical_sell_slips
+                return float(self._slippage_rng.choice(pool))
+            return self._slippage_buy if direction == 'BUY' else self._slippage_sell
+
+        return 0.0
+
     # ── Close position ────────────────────────────────────────
 
     def _calc_dynamic_spread(self, bar_time, h1_atr: float = 0,
@@ -1900,6 +1969,20 @@ class BacktestEngine:
             if 0 <= idx < len(self._spread_series):
                 return min(float(self._spread_series.iloc[idx]), self._spread_max)
             return self._spread_base
+
+        if self._spread_model == "realistic":
+            # Session-aware spread calibrated from real broker data + exit slippage
+            hour = pd.Timestamp(bar_time).hour
+            if 0 <= hour < 8:
+                base = 0.40    # Asia: wider spread
+            elif 8 <= hour < 14:
+                base = 0.25    # London: tightest
+            elif 14 <= hour < 21:
+                base = 0.25    # NY: tight
+            else:
+                base = 0.45    # Late: widest
+            exit_slip = 0.10   # conservative exit slippage estimate
+            return min(base + exit_slip, self._spread_max)
 
         return self._spread_cost
 

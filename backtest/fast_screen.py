@@ -37,6 +37,23 @@ class SimpleTrade:
     exit_reason: str
 
 
+_EMPIRICAL_BUY_SLIPS = np.array([
+    -3.43, -1.29, -1.17, -0.82, -0.59, -0.53, -0.28, -0.22,
+    0.18, 0.19, 0.23, 0.24, 0.26, 0.26, 0.29, 0.30, 0.32, 0.34,
+    0.35, 0.41, 0.41, 0.49, 0.51, 0.61, 0.62, 0.62, 0.64, 0.64,
+    0.67, 0.69, 0.73, 0.81, 0.82, 0.83, 0.87, 0.87, 0.87, 1.08,
+    1.08, 1.12, 1.20, 1.23, 1.33, 1.86, 1.91, 2.26, 2.97, 3.02,
+    3.20, 4.33,
+])
+_EMPIRICAL_SELL_SLIPS = np.array([
+    -2.59, -2.04, -1.61, -0.97, -0.78, -0.63, -0.61, -0.60,
+    -0.51, -0.25, -0.24, -0.06, -0.05, -0.05, -0.04, -0.04, -0.04,
+    0.00, 0.00, 0.17, 0.19, 0.26, 0.28, 0.28, 0.32, 0.40, 0.43,
+    0.46, 0.47, 0.53, 0.58, 0.61, 0.82, 0.91, 0.97, 0.99, 1.04,
+    1.10, 1.55, 2.33, 3.19,
+])
+
+
 def fast_backtest_signals(
     df: pd.DataFrame,
     signals: pd.Series,
@@ -49,6 +66,10 @@ def fast_backtest_signals(
     spread_cost: float = 0.0,
     min_gap_bars: int = 0,
     label: str = "",
+    slippage_model: str = "none",
+    slippage_buy: float = 0.67,
+    slippage_sell: float = 0.17,
+    slippage_seed: int = 42,
 ) -> List[SimpleTrade]:
     """Run a fast single-pass backtest on pre-computed signal series.
 
@@ -78,6 +99,8 @@ def fast_backtest_signals(
     times = df.index
     sig_vals = signals.values
     atr_vals = atr.values
+
+    _slip_rng = np.random.RandomState(slippage_seed) if slippage_model != "none" else None
 
     for i in range(1, len(df)):
         if pos is not None:
@@ -147,6 +170,21 @@ def fast_backtest_signals(
                 continue
             entry_price = opens[i + 1]
             entry_atr = atr_vals[i] if not np.isnan(atr_vals[i]) else 1.0
+            direction = 'BUY' if sig > 0 else 'SELL'
+
+            # Apply entry slippage
+            if _slip_rng is not None:
+                if slippage_model == "fixed":
+                    slip = slippage_buy if direction == 'BUY' else slippage_sell
+                elif slippage_model in ("empirical", "realistic"):
+                    pool = _EMPIRICAL_BUY_SLIPS if direction == 'BUY' else _EMPIRICAL_SELL_SLIPS
+                    slip = float(_slip_rng.choice(pool))
+                else:
+                    slip = 0.0
+                if direction == 'BUY':
+                    entry_price += slip
+                else:
+                    entry_price -= slip
 
             if sig > 0:
                 sl_price = entry_price - sl_mult * entry_atr

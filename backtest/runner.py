@@ -682,6 +682,17 @@ LIVE_PARITY_KWARGS = {
     "live_atr_percentile": True,
 }
 
+# Realistic execution cost preset — calibrated from 91 real EA trades (2026-04/05).
+# Entry slippage: BUY +$0.67, SELL +$0.17 (empirical sampling from live data).
+# Spread: session-aware (Asia $0.40, London/NY $0.25, Late $0.45) + exit slippage.
+REALISTIC_COST_KWARGS = {
+    **LIVE_PARITY_KWARGS,
+    "spread_model": "realistic",
+    "slippage_model": "empirical",
+    "slippage_buy": 0.67,
+    "slippage_sell": 0.17,
+}
+
 # Legacy L5.1 preset — kept for historical comparison only.
 # DO NOT use for new experiments; use LIVE_PARITY_KWARGS instead.
 L51_PARITY_KWARGS = {

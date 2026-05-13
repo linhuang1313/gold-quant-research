@@ -1145,6 +1145,45 @@ K-Fold: thr=0.70, 0.62, 0.65 全部 5/5 folds positive PASS. 推荐阈值 **0.70
 - Overlap: 2,557 (97.5%), Abs-only: 66, Pct-only: 58
 - **结论: ATR% 改法触发率几乎不变，不影响极端事件捕获，SAFE**
 
+## R220-R225 多时间框架策略探索 (2026-05-13)
+
+### 滑点模型整合 (91 笔实盘数据)
+- 来源: `gold-quant-trading/data/gold_trade_log.json`, 分析脚本 `scripts/_slippage_analysis.py`
+- 已整合到 4 个引擎: `engine.py`, `h4_engine.py`, `m30_engine.py`, `fast_screen.py`
+- 新增 `REALISTIC_COST_KWARGS` 预设 (runner.py)
+- Keltner 在全真实模式下: Sharpe 6.41→1.48 (入场滑点+时段spread)
+
+### R220 H4 初筛 (trail 0.3/0.08)
+- h4_kc: 1050笔 Sharpe=3.005 KF PASS
+- h4_macd: 981笔 Sharpe=2.225 KF PASS
+- h4_cci: 545笔 Sharpe=2.336 KF PASS
+- h4_ema_cross: 296笔 Sharpe=2.361 KF PASS
+- h4_squeeze: 364笔 Sharpe=1.792 KF PASS
+
+### R221 H4 深度验证 (trail 0.3/0.08) — 全部 STRONG_PASS 但被R225推翻
+- 5策略全部 WF/MC/Era/KF PASS, Sharpe 3.47-4.65
+- **R225 保守参数(无trail)**: 仅 h4_kc Sharpe=0.830, 其余 ≤0.31 或亏损
+- **教训**: trail 0.3/0.08 在 H4 上制造 93% WR 假象; 新策略必须先通过无trail测试
+
+### R222 M30 策略探索 (运行中)
+- 12/12 策略 K-Fold PASS (trail模式, 未经保守验证)
+- m30_rsi14 Sharpe=4.962, m30_rsi6=3.537, m30_ema_cross=3.487, m30_kc=3.042
+- **需保守参数 + 滑点验证**
+
+### R223 H1 新策略 — 全部 REJECT
+- 9个新策略: ema_cross, macd, cci, rsi, donchian, inside_bar, bb_squeeze, adx_di, engulfing
+- 最好: h1_macd Sharpe=0.133, 其余 0交易或负Sharpe
+- **H1上Keltner仍是唯一有效策略**
+
+### R224 H4 扩展策略
+- h4_adx_di: 827笔 Sharpe=3.848 KF PASS (最佳)
+- h4_mean_rev: 1871笔 Sharpe=2.786 KF PASS
+- h4_momentum: 841笔 Sharpe=2.750 KF PASS
+- +4 more PASS, 1 REJECT (h4_ema_ribbon 0笔)
+- **需保守参数验证**
+
+---
+
 ## Cap 敏感性分析 (2026-05-08)
 
 - 当前固定$Cap 在大手数下价格容忍度极低: TSMOM $60/0.15手 = $4/oz, Chandelier $25/0.08手 = $3.1/oz

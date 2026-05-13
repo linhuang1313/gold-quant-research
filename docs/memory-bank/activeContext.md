@@ -30,7 +30,111 @@
 
 ---
 
-## 进行中 / 已完成实验 (2026-05-13 更新)
+## 进行中 / 已完成实验 (2026-05-14 更新)
+
+### R220-R225 多时间框架策略探索 & 滑点模型 — 进行中 (2026-05-13)
+
+#### 引擎升级: 真实滑点模型 (2026-05-13)
+- **数据来源**: 91笔实盘EA交易 (2026-04~05) 的入场滑点分布
+- **关键发现**: BUY均值+$0.67, SELL均值+$0.17 (方向不对称); 总均值+$0.44/笔
+- **已整合到全部4个引擎**: `engine.py` (M15+H1), `h4_engine.py`, `m30_engine.py`, `fast_screen.py`
+- **新参数**: `slippage_model="none"|"fixed"|"empirical"|"realistic"`, `slippage_buy=0.67`, `slippage_sell=0.17`
+- **新预设**: `REALISTIC_COST_KWARGS` = LIVE_PARITY + empirical slippage + session-aware spread
+- **Keltner 真实成本回测** (spread=$0.30 baseline → +真实滑点):
+
+| 模式 | Sharpe | PnL | WR | 交易数 |
+|------|--------|-----|-----|-------|
+| Baseline (spread=$0.30, 无滑点) | 6.414 | $48,702 | 83.7% | 18,721 |
+| +固定滑点 (BUY+0.67, SELL+0.17) | 2.731 | $20,005 | 79.0% | 16,103 |
+| +经验滑点 (从91笔采样) | 2.471 | $18,948 | 78.8% | 15,587 |
+| 全真实模式 (经验滑点+时段spread) | **1.479** | $11,306 | 74.1% | 15,621 |
+
+- **结论**: 入场滑点是最大成本杀手, Sharpe从6.4降到2.5; 全真实模式Sharpe≈1.5
+
+#### R220: H4 策略初筛 — ✅ 已完成 (2026-05-13)
+- **引擎**: 新建 `H4BacktestEngine` (H4 bars, 无intraday过滤器)
+- **筛选**: 7个策略, 默认trail 0.3/0.08
+
+| 策略 | 交易数 | Sharpe | K-Fold | 状态 |
+|------|--------|--------|--------|------|
+| h4_kc | 1,050 | 3.005 | PASS | CONSIDER |
+| h4_macd | 981 | 2.225 | PASS | CONSIDER |
+| h4_cci | 545 | 2.336 | PASS | CONSIDER |
+| h4_ema_cross | 296 | 2.361 | PASS | CONSIDER |
+| h4_squeeze | 364 | 1.792 | PASS | CONSIDER |
+| h4_rsi | 74 | 1.027 | PASS | 样本小 |
+| h4_donchian | 11 | 6.435 | SKIP | 样本太少 |
+
+#### R221: H4 深度验证 — ✅ 已完成 (远程, trail 0.3/0.08)
+- 5策略全部 Walk-Forward PASS, Monte Carlo PASS, Era PASS → **STRONG_PASS**
+- **⚠️ 但 R225 保守参数测试揭露这些全是 trail 过拟合假象**
+
+| 策略 | R221 Sharpe | R225 保守 Sharpe | 下降幅度 |
+|------|------------|-----------------|---------|
+| h4_kc | 4.527 | **0.830** | -82% |
+| h4_macd | 3.469 | **0.082** | -98% |
+| h4_cci | 4.557 | **0.307** | -93% |
+| h4_ema_cross | 4.574 | **-1.599** | 亏损 |
+| h4_squeeze | 4.653 | **0.001** | -100% |
+
+- **根因**: trail 0.3/0.08 在 H4 上: 激活阈值 0.3 ATR ≈ $4.5-$9, trail距离 0.08 ATR ≈ $1.2-$2.4 → 微利立即锁定 → 93% WR 的假象
+- **保守参数 (SL=3ATR, TP=6ATR, 无trail)**: 70-80% Timeout退出, TP命中率仅5-8%, 说明信号本身无趋势捕获能力
+- **教训**: 任何新策略必须先通过保守参数（无trail）测试，再加trail优化
+
+#### R222: M30 策略探索 — 🔄 运行中 (参数扫描阶段)
+- **引擎**: 新建 `M30BacktestEngine` (M30 bars, session awareness, weekend close)
+- **Phase 1 筛选**: **12/12 全部 K-Fold PASS** (全部trail模式, 未经保守参数验证)
+
+| 策略 | 交易数 | Sharpe | WR | 全时代稳定 |
+|------|--------|--------|-----|-----------|
+| m30_rsi14 | 366 | 4.962 | 91.8% | ✅ 全>5.6 |
+| m30_rsi6 | 2,374 | 3.537 | 87.4% | ✅ 全>3.6 |
+| m30_ema_cross | 2,200 | 3.487 | 86.6% | ✅ 全>4.1 |
+| m30_kc | 5,308 | 3.042 | 85.2% | ✅ 全>3.5 |
+| m30_macd | 7,292 | 2.737 | 85.3% | ✅ 全>3.2 |
+| m30_stoch | 9,825 | 2.622 | 86.3% | ✅ |
+| m30_ema_fast | 4,512 | 2.549 | 85.4% | ✅ |
+| m30_cci | 4,420 | 2.447 | 84.2% | ✅ |
+| +4 more | ... | ... | ... | ✅ |
+
+- **⚠️ 需保守参数 + 滑点模型验证后才能信任**
+
+#### R223: H1 新策略探索 — ✅ 已完成 (全部 REJECT)
+- 9个新H1策略: ema_cross, macd, cci, rsi, donchian, inside_bar, bb_squeeze, adx_di, engulfing
+- **结果**: 全部 REJECT — h1_macd Sharpe=0.133 (最好), 其余 0交易或负Sharpe
+- **结论**: H1 时间框架上 Keltner 仍是唯一有效策略
+
+#### R224: H4 扩展策略 — ✅ 已完成
+
+| 策略 | 交易数 | Sharpe | K-Fold | 状态 |
+|------|--------|--------|--------|------|
+| h4_adx_di | 827 | **3.848** | PASS | CONSIDER |
+| h4_mean_rev | 1,871 | 2.786 | PASS | CONSIDER |
+| h4_momentum | 841 | 2.750 | PASS | CONSIDER |
+| h4_rsi_div | 682 | 2.619 | PASS | CONSIDER |
+| h4_ema_fast | 607 | 2.416 | PASS | CONSIDER |
+| h4_stoch | 1,593 | 2.224 | PASS | CONSIDER |
+| h4_inside_bar | 905 | 1.973 | PASS | CONSIDER |
+| h4_ema_ribbon | 0 | 0.000 | SKIP | REJECT |
+
+- **⚠️ 同样使用 trail, 需保守参数验证**
+
+#### R225: H4 保守参数验证 — ✅ 部分完成 (Part A done, Part B M1 data error)
+- 见 R221 对比表: 保守参数下 5 个 H4 策略仅 h4_kc 微正 (Sharpe 0.830)
+
+#### 实盘滑点数据 (91笔, 2026-04~05)
+
+| 指标 | 全部 | BUY | SELL |
+|------|------|-----|------|
+| 笔数 | 91 | 50 | 41 |
+| 均值 | +$0.441 | +$0.667 | +$0.165 |
+| 中位数 | +$0.410 | +$0.620 | +$0.190 |
+| 最大不利 | +$4.33 | +$4.33 | +$3.19 |
+| 最大有利 | -$3.43 | -$3.43 | -$2.59 |
+| 总成本 | $40.10 | $33.30 | $6.77 |
+
+- **Keltner占89%滑点成本** (72/91笔), BUY方向滑点是SELL的4倍 (追涨成本)
+- 回测应至少用 spread=$0.50 (含滑点), $0.75 作为基准
 
 ### R200-R204 Keltner Trail 深度优化 & TSMOM Bug 诊断 — 已完成 (2026-05-13)
 
@@ -250,6 +354,13 @@
 | R196 | 100-Hour Params Sweep | 全策略核心参数扫描; Cap/Intraday/Stress/Management | results/r196_params |
 | R196b | Param Changes Validation | **全部6个参数变化 NO-GO** — 当前参数已是robust最优 | results/r196b_validation |
 | R196c | New Alpha + Exit Optimization | **Trail ta=0.02/td=0.005 GO** (KF 6/6, WF 19/19, Era全正); Skip Hours再次确认GO | results/r196c_alpha |
+| R220 | H4 Strategy Screening (7策略) | 6/7 KF PASS (trail 0.3/0.08); h4_kc最佳Sharpe=3.005 | results/r220_h4_explore |
+| R221 | H4 Deep Validation (远程) | 5/5 STRONG_PASS — **被R225保守参数推翻为trail假象** | results/r221_h4_deep_validation |
+| R222 | M30 Strategy Explore (12策略) | **12/12 KF PASS** (trail模式); m30_rsi14最佳4.962; **需保守+滑点验证** | results/r222_m30_explore |
+| R223 | H1 New Strategies (9策略) | **全部REJECT** — H1上Keltner仍是唯一 | results/r223_h1_new_strategies |
+| R224 | H4 Extended (8策略) | 7/8 KF PASS; h4_adx_di最佳3.848; **需保守参数验证** | results/r224_h4_extended |
+| R225 | H4 Conservative Params | h4_kc仅0.830, 其余≤0.31或亏损; **揭露trail假象** | results/r225_h4_conservative |
+| 滑点模型 | 真实入场滑点整合 (91笔) | BUY+$0.67/SELL+$0.17; Keltner全真实Sharpe=1.48 (vs 6.41) | backtest/ 4个引擎文件 |
 
 ---
 
@@ -355,6 +466,12 @@
 69. **高ADX阈值反而损害表现** (R196c Phase 8): ADX>20~40均降低Sharpe 0.65~1.10; 当前ADX>14已是最优(R196 Phase 1确认)
 70. **Cap=$70对Keltner是Sharpe最优** (R196 Phase 7): Cap=80降至6.982, Cap=OFF降至6.116; Cap=70精确平衡了保护和收益
 
+71. **真实入场滑点严重侵蚀Sharpe** (R225/滑点模型): 91笔实盘均值+$0.44/笔, BUY+$0.67/SELL+$0.17; Keltner全真实模式Sharpe从6.41降到1.48; **所有回测至少用spread=$0.50, 最好$0.75**
+72. **H4策略trail 0.3/0.08全是假象** (R221→R225): 5个STRONG_PASS策略在保守参数(无trail)下4个崩塌(<0.31 Sharpe), 仅h4_kc微正(0.83); **新策略必须先通过无trail测试**
+73. **H1上Keltner仍是唯一** (R223): 9个新H1策略全部REJECT, 最好仅Sharpe=0.133
+74. **M30有12个K-Fold PASS策略但未验证** (R222): 全部使用trail模式, 需保守参数+滑点验证
+75. **BUY方向滑点是SELL的4倍** (实盘数据): 突破追涨入场成本极高, 回测应考虑方向不对称spread模型
+
 ### 已否决方向汇总
 - PA形态 (R11): Pinbar/Fractal/InsideBar/Engulfing 全部 K-Fold 0/6
 - Squeeze过滤 (R12): K-Fold 0/6 (但 R21 Squeeze 作为独立信号源有效)
@@ -383,6 +500,8 @@
 - High ADX filter >20 (R196c): 反而降低Sharpe 0.65-1.10
 - Post-loss cooldown (R196c): 全部cooldown值降低Sharpe
 - ATR Spike entry (R196c): N<300, 样本不足不可靠
+- H4 策略 (trail 0.3/0.08 参数) (R221→R225): 5个STRONG_PASS在保守参数下全崩, trail制造93%WR假象
+- H1 新策略 ema_cross/macd/cci/rsi/donchian/inside_bar/bb_squeeze/adx_di/engulfing (R223): 全部 REJECT, 0/9 通过
 
 ---
 
