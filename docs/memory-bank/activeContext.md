@@ -30,7 +30,69 @@
 
 ---
 
-## 进行中 / 已完成实验 (2026-05-02 更新)
+## 进行中 / 已完成实验 (2026-05-13 更新)
+
+### R200-R204 Keltner Trail 深度优化 & TSMOM Bug 诊断 — 已完成 (2026-05-13)
+
+- **R202 Keltner Regime-Config 优化**: 测试 8 种 regime_config，**亚军 D (`ta=0.06/td=0.015`, regime 全 tight) 三关全通过**：Sharpe 9.39 vs baseline 8.74 (+0.65)，MaxDD -24%，K-Fold 6/6, WF 19/19, Era 4/4 全正提升。**保守部署首选**（trail_dist 是冠军 F 的近 2 倍，对 tick noise 更鲁棒）
+- **R201 regime_config 覆盖 bug**: 当 `regime_config=ON`，BacktestEngine 会覆盖显式 `trailing_activate_atr`/`trailing_distance_atr`，导致所有 ta/td sweep 同结果。R200 D2/D3 已修复为显式 `regime_config=None`
+- **R203 TSMOM 实盘 0 触发根因**: EA 第 82/100 行 `if(Bars < Slow_Lookback + 2) return 0` silent failure — MT4 图表加载 H1 < 722 时永远不触发。**修复版**: `deploy/TSMOM_H1_EA_v1.20.mq4`（OnInit history-load 检查 + 诊断日志），需重新部署
+- **R200 A3b H1 trail 偏差量化** ★最有价值的输出★: 4 策略 hair-trigger 95-99%，H1 vs M15 Sharpe gap 22-37%。**任何 H1+tight trail 回测系统性高估 Sharpe 1-2 个单位**
+- **R204 Keltner M1 Replay** (脚本完成): 用 M1 数据(比 M15 高 15× 分辨率)重放 R202 winner-D/F，验证 `td=0.008` 在更高分辨率下是否仍稳健 — 决定 F vs D 的部署选择
+- **R200 B1 重跑进行中**: 宏观数据已全部上传到远程, B1 cross-asset 已重新启动
+- **TSMOM Pathology 确认**: R200 A1 "+8.22 Sharpe" 是 0-trades baseline 到 998-trades 的 delta，非真实改进；TSMOM 所有参数点 Sharpe 5.79-7.45
+- **Keltner km 维度完全无效**: BacktestEngine 没实际使用 `kc_mult_override`，5 个 km 值产生完全相同 Sharpe → D2 真实只有 2D
+
+### R196 100-Hour Deep Strategy Parameter Exploration — 已完成 (2026-05-10)
+
+- **R196**: 全策略核心参数暴力扫描 (KC/PSAR/TSMOM/DT/Chandelier/SESS_BO + Cap + Intraday + Stress)
+- **R196b**: 对R196找到的全部6个"最优参数"做 K-Fold + Walk-Forward + Era 三关验证
+  - **结论: 全部 NO-GO** — 当前参数配置已是 robust 最优
+- **R196c**: 转向新方向 — Dynamic SL/TP, Exit enhancements, Trail sweep, Calendar effects
+  - **两项通过严格验证 (Phase 10 GO)**:
+    1. **Trail ta=0.02, td=0.005**: KF 6/6, WF **19/19** (完美), Era 全正 (+0.67~+1.21)
+       - Sharpe 7.191→7.751 (+0.56), MaxDD $211→$135
+    2. **Skip Hours {1,20,22,23}** (Keltner only): KF 6/6, WF 16/19, Era 全正
+       - 已在R195b单独验证, R196c再次确认
+- 脚本: `experiments/run_r196_100h_params.py`, `run_r196b_validation.py`, `run_r196c_new_alpha.py`
+- 结果: `results/r196_params/`, `results/r196b_validation/`, `results/r196c_alpha/`
+
+### R195/R195b Skip Worst Hours — 已完成 (2026-05-09)
+
+- **R195**: 100小时技术探索 (10 phases: Exit/Entry/Regime/Alpha/Portfolio/Advanced/Stability/DD/MTF/Execution)
+- **R195b**: "Skip Worst Hours" 深度验证 — 仅 L8_MAX 通过个策略3-gate
+- 结论: 对 Keltner 应用 hour filter {1,20,22,23} 是 GO (KF 6/6, WF 15/19, Era ALL+)
+
+### R194/R194b 200-Hour Mega Research — 已完成 (2026-05-08)
+
+- **R194**: 20 phases, 4 tracks (策略参数/ML/宏观/组合动态)
+- **R194b**: 验证 COT |Z|>1.5 和 Bearish Macro Regime → 均 **NO-GO** (WF不稳定)
+- 结论: 宏观/COT 过滤器在 Walk-Forward 中不稳定, 维持纯技术面驱动
+
+### R193/R193b Keltner 0.04 Lot Rebalance — 已完成 (2026-05-08)
+
+- **R193**: Keltner 0.04手下的6策略最优配置搜索
+- **R193b**: 暴力测试 (0.02-0.10手全扫描)
+- 结论: Keltner 0.04手最优, SL=6.0, TP=8.0, Trail 0.06/0.01, Cap=$70
+
+### R192/R192b R191 Findings Rigorous Validation — 已完成 (2026-05-09)
+
+- R192: 对R191每个发现隔离验证 → Trail 0.06/0.01 GO(5/6策略), SL=6.0 GO(3/6), MH全NO-GO
+- R192b: Keltner V3 trail vs fixed → fixed 0.06/0.01 GO; SL=6.0 GO
+- 结论见 changelog 详细记录
+
+### R188-R191 系列 — 已完成
+
+- R188: Lot重新标定 + Cap/SL审计 + R187 ATR Pctl Floor 全策略扩展
+- R189: ATR-Adaptive Cap → **NO-GO** (不如 fixed cap)
+- R190: Selective Lot Reduction → Config C (TSMOM/SESS_BO/Chandelier 降手数) 最佳平衡
+- R191: 10-Hour Mega Test Suite (10 batches, 多个存在方法论问题)
+
+### R185-R187 Live System Fragility — 已完成
+
+- R185-R186: Entry filter 验证 (KCBW, choppy gate, RSI-ADX)
+- R187/R187d: ATR Percentile Floor filter → **GO** 并已部署实盘
+  - pctl_rank < 30 时暂停交易, 跳过约8.5%低质量信号
 
 ### R25-R28 D1/H4 Keltner + 综合验证 — 已完成
 
@@ -175,6 +237,19 @@
 | R89 | Lot Size Optimizer | $5k本金最优: L8=0.02, PSAR=0.09, TSMOM=0.08, SESS_BO=0.08; Portfolio Sharpe=6.37 | results/r89_lot_optimizer |
 | R90 | Full External Data Integration (5 Phase) | **Phase D ML Exit最有价值**: TSMOM AUC 0.781 Sharpe+49%; 方向预测无效; 动态配置验证不足; Rule-Based Regime最佳 | results/r90_external_data |
 | R91 | Warsh Regime Analysis | 沃什三情景+Taylor偏差; Regime C(政治化宽松)金价最强+28.9%; TSMOM在非常规Regime爆发(Sharpe 11-17) | results/r91_warsh_regime |
+| R185-R187 | ATR Floor Filter | ATR pctl<30 暂停交易 **GO**, 跳过8.5%低质量信号, 已部署实盘 | 实盘已部署 |
+| R188 | Lot/Cap/SL Audit | Cap vs SL mismatch广泛存在; R187扩展到全策略 | results/r188 |
+| R189 | Adaptive Cap | ATR-Adaptive Cap **NO-GO**, 不如 fixed cap | results/r189 |
+| R190 | Selective Lot Reduction | Config C(降TSMOM/SESS_BO/Chandelier手数)最佳平衡 | results/r190 |
+| R191 | 10-Hour Mega Test | 10 batches; 方法论有缺陷(单变量未隔离), R192纠正 | results/r191 |
+| R192 | R191 Rigorous Validation | Trail 0.06/0.01 **GO**(5/6); SL=6.0 **GO**(3/6); MH全NO-GO; Cap/SL regime | results/r192 |
+| R192b | Keltner Trail/SL Clarification | Fixed 0.06/0.01 **GO**; SL=6.0 **GO** | results/r192b |
+| R193/b | Keltner 0.04 Rebalance | 6策略最优配置; 暴力0.02-0.10 grid | results/r193 |
+| R194/b | 200-Hour Mega Research | 20 phases; COT/Macro filters均 **NO-GO** (WF不稳定) | results/r194 |
+| R195/b | 100-Hour Technical Explore | Skip Hours {1,20,22,23} **GO** (仅Keltner) | results/r195 |
+| R196 | 100-Hour Params Sweep | 全策略核心参数扫描; Cap/Intraday/Stress/Management | results/r196_params |
+| R196b | Param Changes Validation | **全部6个参数变化 NO-GO** — 当前参数已是robust最优 | results/r196b_validation |
+| R196c | New Alpha + Exit Optimization | **Trail ta=0.02/td=0.005 GO** (KF 6/6, WF 19/19, Era全正); Skip Hours再次确认GO | results/r196c_alpha |
 
 ---
 
@@ -269,6 +344,17 @@
 59. **动态Regime配置验证不足** (R90-E): Sharpe略高(+0.25)但K-Fold仅2/6胜出, 维持静态配置
 60. **沃什Regime C(政治化宽松)最利好黄金** (R91): 年化+28.9%, Sharpe 1.45; TSMOM在非常规Regime爆发(B=17.18, C=11.01); 简单Taylor偏差与金价相关性+0.10优于市场基础偏差
 
+61. **当前6策略参数已是robust最优** (R196b): 全部6个"最优参数"(Keltner kc=1.5/ema=30, PSAR step=0.03/max=0.10, TSMOM fast=480/slow=1200, DT k=0.4/nb=10, Chandelier atr_p=14, SESS_BO hour=13/lb=3) K-Fold+WF+Era三关全部NO-GO — **参数在全样本看似更好但时间不稳定, 是过拟合**
+62. **Keltner Trail ta=0.02/td=0.005 是可部署优化** (R196c): KF 6/6, WF **19/19**(完美), Era 5/5 全正(+0.67~+1.21); Sharpe 7.191→7.751(+7.8%), MaxDD $211→$135; 原理: 更早激活trail(2% vs 6%)、更紧跟踪(0.5% vs 1%) → 锁定利润更快
+63. **Skip Hours {1,20,22,23} 对Keltner有效** (R195b+R196c): KF 6/6, WF 16/19, Era全正; 这些小时spread/range ratio极高(Hour21=0.672, Hour22=0.196, Hour23=0.156), 交易成本占比过大
+64. **Dynamic SL/TP, Time-decay TP, Ratchet trail, Break-even stop 对Keltner无效** (R196c Phase 1-2): 因为max_hold=2, 绝大部分交易在1-2 bar内trail出场, 这些高级exit机制来不及生效
+65. **ATR Spike entry filter不可靠** (R196c Phase 3): spike_thresh>1.2时N<300, 样本严重不足, 看似高Sharpe但无统计意义
+66. **Post-loss cooldown和streak reversal无效** (R196c Phase 9): 所有cooldown值均降低Sharpe; Keltner交易之间无序列依赖
+67. **Portfolio ruin probability = 0%** (R196 Phase 10): $5000本金, MC 10000次, 20%/30%/50% DD概率全为0; VaR95=-$27/day; Calmar=309
+68. **COT和宏观因子过滤器时间不稳定** (R194b): COT |Z|>1.5 和 Bearish Macro Regime在Walk-Forward中不稳定, 维持纯技术面驱动
+69. **高ADX阈值反而损害表现** (R196c Phase 8): ADX>20~40均降低Sharpe 0.65~1.10; 当前ADX>14已是最优(R196 Phase 1确认)
+70. **Cap=$70对Keltner是Sharpe最优** (R196 Phase 7): Cap=80降至6.982, Cap=OFF降至6.116; Cap=70精确平衡了保护和收益
+
 ### 已否决方向汇总
 - PA形态 (R11): Pinbar/Fractal/InsideBar/Engulfing 全部 K-Fold 0/6
 - Squeeze过滤 (R12): K-Fold 0/6 (但 R21 Squeeze 作为独立信号源有效)
@@ -288,6 +374,15 @@
 - Tick 微观结构 (R34): 大跳无方向偏差, spread spikes集中在亚洲盘(23:00), 无可用信号
 - L8 全参数暴力替代 (R50): 48,300组合(Mult0.8-1.6/SL2.0-3.5/各种叠加), K-Fold 0/50通过, Fold3全面崩溃, M0.8等替代参数时间不稳定
 - SuperTrend H1黄金 (R51): 8,640组合全部Sharpe≤0, 在H1黄金上完全不可用
+- 全策略核心参数变化 (R196b): Keltner kc/ema, PSAR af, TSMOM lookback, DT k/nb, Chandelier atr_p, SESS_BO hour/lb — 6项全NO-GO, 全样本改善但时间不稳定
+- Adaptive Cap (R189): ATR-Adaptive Cap sweep 1.5-4.0x, 不如fixed cap
+- COT |Z|>1.5 filter (R194b): Walk-Forward不稳定, 非单调Sharpe jump
+- Bearish Macro Regime filter (R194b): VIX/DXY/Yields/Credit stress — WF不稳定
+- Dynamic SL/TP by ATR pctl (R196c): 最佳仅+0.034, 不值得增加复杂度
+- Time-decay TP / Ratchet trail / Break-even stop (R196c): 对Keltner(mh=2)无效
+- High ADX filter >20 (R196c): 反而降低Sharpe 0.65-1.10
+- Post-loss cooldown (R196c): 全部cooldown值降低Sharpe
+- ATR Spike entry (R196c): N<300, 样本不足不可靠
 
 ---
 
