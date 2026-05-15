@@ -19,7 +19,8 @@ from backtest.runner import (
     screen_then_validate,
     load_csv, load_m15, load_h1_aligned, add_atr_percentile,
     prepare_indicators_custom, sanitize_for_json,
-    C12_KWARGS, V3_REGIME, TRUE_BASELINE_KWARGS, LIVE_PARITY_KWARGS, REALISTIC_COST_KWARGS,
+    C12_KWARGS, V3_REGIME, TRUE_BASELINE_KWARGS,
+    LIVE_PARITY_KWARGS, L8_PARITY_KWARGS, R202_PARITY_KWARGS, REALISTIC_COST_KWARGS,
     M15_CSV_PATH, H1_CSV_PATH,
 )
 from backtest.fast_screen import (

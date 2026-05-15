@@ -7,7 +7,7 @@ Research Config — 独立于实盘 config.py
 
 # ── 账户参数 ──
 CAPITAL = 2000
-LOT_SIZE = 0.03
+LOT_SIZE = 0.04
 RISK_PER_TRADE = 50
 MIN_LOT_SIZE = 0.01
 MAX_LOT_SIZE = 0.05

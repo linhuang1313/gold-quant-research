@@ -651,18 +651,10 @@ V3_REGIME = {
     'high': {'trail_act': 0.6, 'trail_dist': 0.20},
 }
 
-# Matches live config.py + exit_logic.py as of 2026-04-28 (L8_BASE+Cap80).
+# ── L8 Legacy Preset (frozen 2026-04-28) ─────────────────────────────────────
 # History: L5.1 (04-13) → L6 (04-18) → L7 (04-22) → L8 (04-26) → L8_BASE+Cap80 (04-28)
-# Key L8 changes vs L5.1:
-#   - ADX: 18→14 (R39 K-Fold 6/6)
-#   - Regime trail: UT3g_micro (R39, Sharpe 10.86→12.02)
-#   - TATrail: OFF (R42, was net negative)
-#   - MaxHold: 5h unchanged (was 5h in L5.1, 2h in L7, back to 5h in L8_BASE)
-# Features NOT in engine kwargs (applied post-hoc in experiments):
-#   - KCBW5: use filter_kcbw5() — currently OFF in live
-#   - MaxLoss Cap $80: use apply_max_loss_cap(trades, 80) — "disaster insurance"
-#   - Fixed lot 0.03: live uses fixed lots, engine uses ATR-based sizing
-LIVE_PARITY_KWARGS = {
+# Kept for historical comparison. DO NOT use for new experiments.
+L8_PARITY_KWARGS = {
     "trailing_activate_atr": 0.14,
     "trailing_distance_atr": 0.025,
     "sl_atr_mult": 3.5,
@@ -673,6 +665,60 @@ LIVE_PARITY_KWARGS = {
         'normal': {'trail_act': 0.14, 'trail_dist': 0.025},
         'high':   {'trail_act': 0.06, 'trail_dist': 0.008},
     },
+    "intraday_adaptive": True,
+    "choppy_threshold": 0.50,
+    "time_decay_tp": False,
+    "rsi_adx_filter": 40,
+    "keltner_max_hold_m15": 20,
+    "max_positions": 1,
+    "live_atr_percentile": True,
+}
+
+# ── R202 preset (frozen 2026-05-14, superseded by Trail-First) ────────────────
+# SL=6.0 + Cap=$70 proved harmful in R233 ablation (-0.7% and -1.7% respectively).
+# Kept for comparison. DO NOT use for new experiments.
+R202_PARITY_KWARGS = {
+    "trailing_activate_atr": 0.06,
+    "trailing_distance_atr": 0.015,
+    "sl_atr_mult": 6.0,
+    "tp_atr_mult": 8.0,
+    "keltner_adx_threshold": 14,
+    "regime_config": {
+        'low':    {'trail_act': 0.06, 'trail_dist': 0.015},
+        'normal': {'trail_act': 0.06, 'trail_dist': 0.015},
+        'high':   {'trail_act': 0.06, 'trail_dist': 0.015},
+    },
+    "maxloss_cap": 70,
+    "maxloss_cap_atr_mult": 4.0,
+    "min_lot_size": 0.04,
+    "max_lot_size": 0.04,
+    "intraday_adaptive": True,
+    "choppy_threshold": 0.50,
+    "time_decay_tp": False,
+    "rsi_adx_filter": 40,
+    "keltner_max_hold_m15": 20,
+    "max_positions": 1,
+    "live_atr_percentile": True,
+}
+
+# ── LIVE_PARITY: Trail-First (R234 STRONG_PASS 6/6, deployed 2026-05-14) ─────
+# History: L8 (04-28) → R202 (05-14 AM) → Trail-First (05-14 PM)
+# R233 ablation showed: Trail change = +4.8%, SL 6.0 = -0.7%, Cap $70 = -1.7%
+# Trail-First = keep R202 trail (best single change), revert SL to 3.5, remove Cap
+# R234 validation: Sharpe 5.675, WF 19/19, MC P(>0)=100%, Sensitivity Δ=0.203
+LIVE_PARITY_KWARGS = {
+    "trailing_activate_atr": 0.06,
+    "trailing_distance_atr": 0.015,
+    "sl_atr_mult": 3.5,
+    "tp_atr_mult": 8.0,
+    "keltner_adx_threshold": 14,
+    "regime_config": {
+        'low':    {'trail_act': 0.06, 'trail_dist': 0.015},
+        'normal': {'trail_act': 0.06, 'trail_dist': 0.015},
+        'high':   {'trail_act': 0.06, 'trail_dist': 0.015},
+    },
+    "min_lot_size": 0.04,
+    "max_lot_size": 0.04,
     "intraday_adaptive": True,
     "choppy_threshold": 0.50,
     "time_decay_tp": False,
