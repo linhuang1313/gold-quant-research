@@ -706,12 +706,24 @@ R202_PARITY_KWARGS = {
 # R233 ablation showed: Trail change = +4.8%, SL 6.0 = -0.7%, Cap $70 = -1.7%
 # Trail-First = keep R202 trail (best single change), revert SL to 3.5, remove Cap
 # R234 validation: Sharpe 5.675, WF 19/19, MC P(>0)=100%, Sensitivity Δ=0.203
+#
+# 2026-05-15: Merged independent optimizations deployed to live:
+#   max_hold 20→8: R155 sweep (hold_grid=[4,8,...128]), K-Fold 6.04>5.77
+#   maxloss_cap=0: R233 ablation (Cap $70 = -1.7%), Trail-First removes Cap
+#   lots 0.04: R193 (Sharpe 7.191, Trail 83.6%)
+#   ATR_SL_MAX 50→150: 2026-04-23 bugfix, R30/R39 validated
+# Session ADX (R178): fully mirrored via keltner_session_adx parameter.
 LIVE_PARITY_KWARGS = {
     "trailing_activate_atr": 0.06,
     "trailing_distance_atr": 0.015,
     "sl_atr_mult": 3.5,
     "tp_atr_mult": 8.0,
-    "keltner_adx_threshold": 14,
+    "keltner_session_adx": {
+        "asia":    (0, 7, 14),      # R178: 保留原值, 实盘1月 27笔 WR=93% +$222
+        "london":  (8, 12, 10),     # R178b: 101笔额外信号 WR=88.1% Sharpe=6.68
+        "ny":      (13, 17, 16),    # NY时段需更强趋势确认
+        "evening": (18, 23, 14),    # R178: 保留原值, 实盘1月 12笔 WR=92% +$102
+    },
     "regime_config": {
         'low':    {'trail_act': 0.06, 'trail_dist': 0.015},
         'normal': {'trail_act': 0.06, 'trail_dist': 0.015},
@@ -723,7 +735,8 @@ LIVE_PARITY_KWARGS = {
     "choppy_threshold": 0.50,
     "time_decay_tp": False,
     "rsi_adx_filter": 40,
-    "keltner_max_hold_m15": 20,
+    "keltner_max_hold_m15": 8,
+    "maxloss_cap": 0,
     "max_positions": 1,
     "live_atr_percentile": True,
 }

@@ -107,6 +107,8 @@ class BacktestEngine:
         tp_atr_mult: float = 0,
         # Keltner ADX threshold override
         keltner_adx_threshold: float = 0,
+        # R178: Session-based Keltner ADX — {session_name: (start_hour, end_hour, adx_threshold)}
+        keltner_session_adx: Optional[Dict[str, tuple]] = None,
         # Position / cooldown overrides
         max_positions: int = 0,
         cooldown_hours: float = 0,
@@ -307,6 +309,7 @@ class BacktestEngine:
 
         # Keltner
         self._kc_adx_threshold = keltner_adx_threshold
+        self._kc_session_adx = keltner_session_adx
 
         # Positions / cooldown
         self._max_pos = max_positions or config.MAX_POSITIONS
@@ -792,6 +795,19 @@ class BacktestEngine:
         val = self._h1_atr_pct_arr[h1_idx]
         return 0.5 if np.isnan(val) else float(val)
 
+    def _get_kc_adx_for_hour(self, utc_hour: int) -> Optional[float]:
+        """R178: Return Keltner ADX threshold for the given UTC hour.
+        Uses session_adx map if configured, falls back to _kc_adx_threshold.
+        Returns None to block entry (hour not in any session)."""
+        if self._kc_session_adx:
+            for _name, (start, end, adx_thr) in self._kc_session_adx.items():
+                if start <= utc_hour <= end:
+                    return float(adx_thr)
+            return None
+        if self._kc_adx_threshold > 0:
+            return float(self._kc_adx_threshold)
+        return float(signals_mod.ADX_TREND_THRESHOLD)
+
     # ── Main loop ─────────────────────────────────────────────
 
     def run(self) -> List[TradeRecord]:
@@ -1173,7 +1189,7 @@ class BacktestEngine:
             if reason:
                 self._close_position(pos, exit_price, bar_time, reason, h1_idx=h1_idx)
 
-    def _dual_kc_levels_last(self, h1_window: pd.DataFrame) -> Optional[Dict]:
+    def _dual_kc_levels_last(self, h1_window: pd.DataFrame, utc_hour: int = -1) -> Optional[Dict]:
         need = max(self._dual_kc_fast_ema, self._dual_kc_slow_ema) + 2
         if h1_window is None or len(h1_window) < need:
             return None
@@ -1200,7 +1216,14 @@ class BacktestEngine:
         sm_v = float(sm.iloc[-1])
         if any(pd.isna(v) for v in [fu_v, fl_v, su_v, sl_v, sm_v]):
             return None
-        adx_th = self._kc_adx_threshold if self._kc_adx_threshold > 0 else signals_mod.ADX_TREND_THRESHOLD
+        if utc_hour >= 0 and self._kc_session_adx:
+            adx_th = self._get_kc_adx_for_hour(utc_hour)
+            if adx_th is None:
+                return None
+        elif self._kc_adx_threshold > 0:
+            adx_th = self._kc_adx_threshold
+        else:
+            adx_th = signals_mod.ADX_TREND_THRESHOLD
         if adx < adx_th:
             return None
         fast_buy = close > fu_v and close > ema100
@@ -1267,12 +1290,15 @@ class BacktestEngine:
                 self.skipped_min_bars += 1
                 return
 
+        # Resolve UTC hour once for session ADX
+        _bar_utc_hour = pd.Timestamp(bar_time).hour
+
         # ADX gray zone: require higher trend_score when ADX is marginal
         if self._adx_gray_zone > 0 and self._intraday_adaptive and h1_idx is not None and h1_idx >= 0:
             adx_val = self._h1_adx_arr[h1_idx]
             if np.isnan(adx_val):
                 adx_val = 0.0
-            adx_threshold = self._kc_adx_threshold or signals_mod.ADX_TREND_THRESHOLD
+            adx_threshold = self._get_kc_adx_for_hour(_bar_utc_hour) or signals_mod.ADX_TREND_THRESHOLD
             if adx_threshold <= adx_val < adx_threshold + self._adx_gray_zone:
                 if self._current_score < self._adx_gray_zone_min_score:
                     self.skipped_adx_gray += 1
@@ -1304,10 +1330,13 @@ class BacktestEngine:
             if rc.get('keltner_adx', 0) > 0:
                 self._kc_adx_threshold = rc['keltner_adx']
 
-        # Keltner ADX threshold override
-        if self._kc_adx_threshold > 0:
+        # Keltner ADX threshold override (R178: session-aware)
+        _effective_adx = self._get_kc_adx_for_hour(_bar_utc_hour)
+        if _effective_adx is None:
+            return  # hour not in any session → block Keltner entry
+        if _effective_adx != signals_mod.ADX_TREND_THRESHOLD:
             old_threshold = signals_mod.ADX_TREND_THRESHOLD
-            signals_mod.ADX_TREND_THRESHOLD = self._kc_adx_threshold
+            signals_mod.ADX_TREND_THRESHOLD = _effective_adx
             signals = signals_mod.scan_all_signals(h1_window, 'H1')
             signals_mod.ADX_TREND_THRESHOLD = old_threshold
         else:
@@ -1339,7 +1368,7 @@ class BacktestEngine:
 
         if self._dual_kc_mode and h1_window is not None and len(h1_window) > 0:
             dm = self._dual_kc_mode.strip().lower()
-            lv = self._dual_kc_levels_last(h1_window)
+            lv = self._dual_kc_levels_last(h1_window, utc_hour=pd.Timestamp(bar_time).hour)
             if lv is not None:
                 filtered = []
                 for sig in signals:

@@ -14,8 +14,8 @@ alwaysApply: true
 The live trading system is **entirely Python-driven**. MT4 only acts as an order executor.
 
 ```
-Python (gold_trader.py) — 主进程，每30秒扫描
-  ├── strategies/signals.py — 所有策略信号计算（Keltner, TSMOM, PSAR, SESS_BO）
+Python (gold_trader.py) — 主进程，每15秒扫描
+  ├── strategies/signals.py — 所有策略信号计算（Keltner, TSMOM, SESS_BO, DualThrust, M30_RSI14）
   ├── strategies/exit_logic.py — 出场逻辑（trailing stop, maxloss cap）
   ├── mt4_bridge.py — 通过文件桥接与MT4通信
   ├── config.py — 所有参数集中管理
@@ -37,23 +37,25 @@ GoldBridge_EA.mq4 — MT4端，纯"下单执行器"
 - EA每30秒写 `bars_h1.json` 和 `bars_m15.json`（200根K线）
 - EA每5秒写 `heartbeat.json`, `account.json`, `positions.json`
 
-## Live Portfolio (6-slot, synced 2026-05-09)
+## Live Portfolio (synced 2026-05-15 from config.py)
 
 | Strategy | Lots | MaxLoss Cap | SL/TP (ATR) | Trail Act/Dist | Max Hold | Notes |
 |----------|------|-------------|-------------|----------------|----------|-------|
-| Keltner (L8_MAX) | 0.02 | $35 | 3.5 / 8.0 | 0.14 / 0.025 | 2 bars | ML exit filter (0.65), R178 session ADX |
-| PSAR | 0.09 | $60 | 4.0 / 6.0 | 0.08 / 0.015 | 15 bars | Skip hours {3,7,22} UTC |
-| TSMOM | 0.15 | $60 | 6.0 / 8.0 | 0.14 / 0.025 | 12 bars | Score 480/720, Friday flatten guard |
-| SESS_BO | 0.13 | $60 | 4.5 / 4.0 | 0.14 / 0.025 | 20 bars | GMT12 breakout, D1 EMA20 filter ON |
-| Dual Thrust | 0.04 | $18 | 4.5 / 8.0 | 0.14 / 0.025 | 20 bars | k=0.5, n_bars=6 |
-| Chandelier | 0.08 | $25 | 4.5 / 8.0 | 0.14 / 0.025 | 20 bars | period=22, mult=3.0, RSI filter ON |
+| Keltner (Trail-First) | 0.04 | None (SL兜底) | 3.5 / 8.0 | **0.06 / 0.015** | 2 H1 bars | R202 trail, R178 session ADX, ML filter (0.65) |
+| TSMOM | 0.04 | $60 (cap_atr=6.5) | 3.5 / 8.0 | 0.14 / 0.025 | 30 bars | Score 480/960, R205/R206 |
+| SESS_BO | 0.04 | $60 (cap_atr=5.0) | 4.5 / 4.0 | 0.06 / 0.01 | 20 bars | GMT12 breakout, D1 EMA20 filter ON |
+| Dual Thrust | 0.04 | $18 (cap_atr=5.0) | 6.0 / 8.0 | 0.06 / 0.01 | 20 bars | k=0.5, n_bars=6 |
+| M30 RSI14 | 0.04 | None | 8.0 / 8.0 | 0.30 / 0.08 | 24 bars | RSI14 mean-reversion on M30 |
+| PSAR | OFF | - | - | - | - | R209v2: 10年Sharpe=-0.37, 关闭 |
+| Chandelier | OFF | - | - | - | - | R209v2: 10年Sharpe=0.07, 关闭 |
 
-Capital: $5,000 | MAX_POSITIONS: **4** (6策略竞争4槽位) | MAX_TOTAL_LOSS: $3,750
-Max simultaneous exposure: 0.51 lots (0.15+0.09+0.13+0.08+0.04+0.02), R162 halves in high vol
+Capital: $5,000 | MAX_POSITIONS: **5** | MAX_TOTAL_LOSS: $3,750
+Active strategies: Keltner + TSMOM + SESS_BO + Dual Thrust + M30_RSI14
 
 ### Risk Controls
 - MAX_LOT_CAP_BY_LOSSES: {0 losses: 0.13, 1: 0.08, 2: 0.05, 3: 0.03}
-- Rule B: ATR > 3σ (60-bar) → skip 8 hours
+- Rule B: ATR > **2.5σ** (60-bar) → skip 8 hours (R205: 3.0→2.5)
+- R187: ATR percentile floor = 30th (lb=300), skip low-vol entries
 - R162: ATR > 2× rolling mean → halve lot size
 - COOLDOWN_MINUTES: 30 (per strategy after losing close)
 - DAILY_MAX_LOSS / DAILY_MAX_LOSSES: $9999 / 9999 (effectively disabled)

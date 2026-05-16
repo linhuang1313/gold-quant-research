@@ -216,7 +216,7 @@ def calc_range_contraction(df: pd.DataFrame, short_n: int = 7, long_n: int = 28)
 ADX_TREND_THRESHOLD = 18    # R3组合回测最优: ADX18 Sharpe +0.09, 组合Sharpe 2.54 (24→18)
 ATR_SL_MULTIPLIER = 3.5     # L5.1部署: 4.5→3.5, R6-A5 K-Fold 6/6, Sharpe 4.07→4.24, PnL +$4,699
 ATR_SL_MIN = 10
-ATR_SL_MAX = 50
+ATR_SL_MAX = 150            # 2026-04-23 bugfix: 50→150 (金价$4700+, 3.5xATR≈70被cap=50截断), R30/R39 validated
 ATR_TP_MULTIPLIER = 8.0     # EXP06验证: TP触发率仅1.4%, 放宽到8.0让追踪止盈决定出场, Sharpe 1.52→1.56 (5.0→8.0)
 
 
